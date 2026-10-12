@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Support\Str;
 
 class Console extends Model
 {
@@ -50,8 +51,56 @@ class Console extends Model
         return $this->hasMany(AuditLog::class);
     }
 
+    public function cashier(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(User::class, 'device_id', 'device_id')
+            ->where('role', 'cashier');
+    }
+
     public function isOnline(): bool
     {
         return $this->status === 'online';
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'id';
+    }
+
+    public static function generateDeviceId(): string
+    {
+        // In production, this would use the ESP8266 MAC address
+        // Format: ESP-XXXXXXXXXXXX (12 hex chars from MAC)
+        $hexChars = '0123456789ABCDEF';
+        $deviceId = 'ESP-';
+        for ($i = 0; $i < 12; $i++) {
+            $deviceId .= $hexChars[random_int(0, 15)];
+        }
+        return $deviceId;
+    }
+
+    public static function validateDeviceId(string $deviceId): bool
+    {
+        return preg_match('/^ESP-[0-9A-F]{12}$/', $deviceId) === 1;
+    }
+
+    public function getStatusBadgeClass(): string
+    {
+        return match ($this->status) {
+            'online' => 'bg-green-100 text-green-800',
+            'offline' => 'bg-gray-100 text-gray-800',
+            'maintenance' => 'bg-yellow-100 text-yellow-800',
+            default => 'bg-gray-100 text-gray-800',
+        };
+    }
+
+    public function getStatusLabel(): string
+    {
+        return match ($this->status) {
+            'online' => 'Online',
+            'offline' => 'Offline',
+            'maintenance' => 'Maintenance',
+            default => 'Unknown',
+        };
     }
 }

@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\Auth\LoginController;
+use App\Http\Controllers\Admin\ConsoleController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -25,6 +26,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
             ];
             return view('admin.dashboard', compact('stats'));
         })->name('dashboard');
+
+        // Console Management Routes
+        Route::resource('consoles', ConsoleController::class)
+            ->except(['show'])
+            ->parameters(['console' => 'console']);
+        Route::post('/consoles/{console}/rotate-credentials', [ConsoleController::class, 'rotateCredentials'])
+            ->name('consoles.rotate-credentials');
     });
 });
 
