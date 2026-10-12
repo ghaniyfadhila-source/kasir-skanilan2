@@ -1,7 +1,34 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\Auth\LoginController;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+// Admin Auth Routes
+Route::prefix('admin')->name('admin.')->group(function () {
+    Route::middleware('guest')->group(function () {
+        Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
+        Route::post('/login', [LoginController::class, 'login'])->name('login.post');
+    });
+
+    Route::middleware(['auth', 'admin'])->group(function () {
+        Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+        Route::get('/dashboard', function () {
+            $stats = [
+                'users' => \App\Models\User::count(),
+                'consoles_online' => \App\Models\Console::where('status', 'online')->count(),
+                'menu_items' => \App\Models\MenuItem::where('is_active', true)->count(),
+                'transactions_today' => \App\Models\Transaction::whereDate('created_at', today())->count(),
+            ];
+            return view('admin.dashboard', compact('stats'));
+        })->name('dashboard');
+    });
+});
+
+// Fallback login route for auth middleware (redirects to admin login)
+Route::get('/login', function () {
+    return redirect()->route('admin.login');
+})->name('login');
