@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\ConsoleController;
+use App\Http\Controllers\Admin\MenuController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -33,6 +34,26 @@ Route::prefix('admin')->name('admin.')->group(function () {
             ->parameters(['console' => 'console']);
         Route::post('/consoles/{console}/rotate-credentials', [ConsoleController::class, 'rotateCredentials'])
             ->name('consoles.rotate-credentials');
+
+        // Menu Management Routes
+        Route::prefix('menu')->name('menu.')->group(function () {
+            Route::get('/', [MenuController::class, 'categoriesIndex'])->name('index');
+            
+            // Categories
+            Route::post('/categories', [MenuController::class, 'categoriesStore'])->name('categories.store');
+            Route::put('/categories/{category}', [MenuController::class, 'categoriesUpdate'])->name('categories.update');
+            Route::delete('/categories/{category}', [MenuController::class, 'categoriesDestroy'])->name('categories.destroy');
+            Route::post('/categories/reorder', [MenuController::class, 'categoriesReorder'])->name('categories.reorder');
+            
+            // Menu Items
+            Route::get('/items', [MenuController::class, 'itemsIndex'])->name('items.index');
+            Route::get('/items/create', [MenuController::class, 'itemsCreate'])->name('items.create');
+            Route::post('/items', [MenuController::class, 'itemsStore'])->name('items.store');
+            Route::get('/items/{item}/edit', [MenuController::class, 'itemsEdit'])->name('items.edit');
+            Route::put('/items/{item}', [MenuController::class, 'itemsUpdate'])->name('items.update');
+            Route::delete('/items/{item}', [MenuController::class, 'itemsDestroy'])->name('items.destroy');
+            Route::post('/items/reorder', [MenuController::class, 'itemsReorder'])->name('items.reorder');
+        });
     });
 });
 
