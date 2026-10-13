@@ -1,4 +1,4 @@
-# Ticket 13: OTA Firmware Update
+# Ticket 14: OTA Firmware Update
 
 ## Objective
 Enable Over-The-Air firmware updates for ESP8266 consoles via Supabase Storage + Realtime trigger.
@@ -25,7 +25,7 @@ Enable Over-The-Air firmware updates for ESP8266 consoles via Supabase Storage +
       "size": 327680
     }
     ```
-- [ ] ESP8266 Firmware (Ticket 06 integration):
+- [ ] ESP8266 Firmware (Ticket 07 integration):
   - On `ota.available`: verify current version < new version
   - Download to OTA partition (HTTP GET with Range headers for resume)
   - Verify SHA256 matches
@@ -54,8 +54,8 @@ Enable Over-The-Air firmware updates for ESP8266 consoles via Supabase Storage +
 
 ## Dependencies
 - Ticket 03 (Console CRUD + firmware_version field)
-- Ticket 06 (Firmware OTA module)
-- Ticket 08 (Realtime channel for ota.available)
+- Ticket 07 (Firmware OTA module)
+- Ticket 09 (Realtime channel for ota.available)
 - Supabase Storage bucket created manually or via migration
 
 ## Testing

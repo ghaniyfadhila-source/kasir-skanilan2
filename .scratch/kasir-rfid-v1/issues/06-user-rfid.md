@@ -1,4 +1,4 @@
-# Ticket 05: User Management + RFID Assign
+# Ticket 06: User Management + RFID Assign
 
 ## Objective
 Admin interface for managing users (students, cashiers), RFID card assignment, and balance top-up.
@@ -42,6 +42,7 @@ Admin interface for managing users (students, cashiers), RFID card assignment, a
 - Ticket 01 (User, RfidCard models + migrations)
 - Ticket 02 (admin shell)
 - Ticket 03 (consoles for cashier assignment)
+- Ticket 05 (Cashier Web UI for cashier-console linking)
 
 ## API Impact
 - `/api/console/balance/{uid}` reads `rfid_cards` → `user` → `balance_cents`

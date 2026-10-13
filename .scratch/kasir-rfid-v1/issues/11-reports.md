@@ -1,4 +1,4 @@
-# Ticket 10: Reports + Export
+# Ticket 11: Reports + Export
 
 ## Objective
 Admin reporting dashboard with daily/weekly/monthly views, charts (Chart.js), and CSV/Excel export.
@@ -12,7 +12,7 @@ Admin reporting dashboard with daily/weekly/monthly views, charts (Chart.js), an
   - Summary cards: Total Transactions, Total Revenue, Unique Buyers, Avg Transaction
   - Chart 1: Revenue per day (bar, Chart.js)
   - Chart 2: Top 10 menu items (doughnut)
-  - Chart 3: Payment method? (all RFID/balance) — skip, maybe by cashier
+  - Chart 3: By cashier (bar)
   - Table: Recent transactions (paginated, sortable)
 - [ ] Export:
   - CSV: `transactions_{start}_{end}.csv` — columns: Date, Receipt No, Buyer, Cashier, Items, Total, Status
@@ -40,7 +40,7 @@ Admin reporting dashboard with daily/weekly/monthly views, charts (Chart.js), an
 ## Dependencies
 - Ticket 01 (Transaction model)
 - Ticket 02 (Admin shell)
-- Ticket 07 (Transaction creation)
+- Ticket 08 (Transaction creation)
 
 ## Chart.js Config Example
 ```javascript

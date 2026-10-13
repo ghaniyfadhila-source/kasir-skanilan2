@@ -1,4 +1,4 @@
-# Ticket 12: Forgot Password (Admin Code)
+# Ticket 13: Forgot Password (Admin Code)
 
 ## Objective
 Implement "forgot password" flow where admin generates a 6-digit reset code for any user (no email sending).
@@ -44,7 +44,7 @@ Implement "forgot password" flow where admin generates a 6-digit reset code for 
 ## Dependencies
 - Ticket 01 (PasswordReset model + migration)
 - Ticket 02 (Admin shell + auth)
-- Ticket 11 (Audit logging)
+- Ticket 12 (Audit logging)
 
 ## Testing
 - Admin generates code → displayed correctly

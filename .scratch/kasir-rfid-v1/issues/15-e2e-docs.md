@@ -1,4 +1,4 @@
-# Ticket 14: E2E Testing + Documentation
+# Ticket 15: E2E Testing + Documentation
 
 ## Objective
 End-to-end test coverage for critical flows, API documentation, and deployment guides.
@@ -6,16 +6,17 @@ End-to-end test coverage for critical flows, API documentation, and deployment g
 ## Scope
 - [ ] E2E Tests (Laravel Dusk or Pest Browser):
   - Admin login → dashboard → create console → rotate credentials
-  - Admin create category + menu item → verify appears in console menu API
+  - Admin create category + menu item → verify appears in cashier menu API
   - Admin create student + assign RFID → top-up balance
+  - Cashier Web UI: login → create order → "BAYAR" → awaiting RFID
   - Console (simulated) RFID tap → balance check → transaction → sync
-  - Offline queue: disconnect network → 3 transactions → reconnect → verify sync
-  - Auto-void: queue transaction → wait 5 min → verify voided
+  - Offline queue: disconnect network → 3 RFID taps → reconnect → verify sync
+  - Auto-void: queue RFID tap → wait 5 min → verify voided
   - OTA: upload firmware → deploy → verify version update (mock)
 - [ ] API Documentation:
   - OpenAPI/Swagger spec: `docs/api/openapi.yaml`
   - Generate from route annotations (use `darkaonline/l5-swagger`)
-  - Endpoints: all `/api/console/*` + admin auth
+  - Endpoints: all `/api/cashier/*`, `/api/console/*` + admin auth
   - Examples: request/response JSON
 - [ ] Documentation:
   - `docs/hardware/assembly.md` — wiring diagram, pinout, component photos
@@ -45,7 +46,7 @@ End-to-end test coverage for critical flows, API documentation, and deployment g
 - Documentation: Markdown in `docs/`, render with GitHub Pages or VitePress later
 
 ## Dependencies
-- All previous tickets (01-13)
+- All previous tickets (01-14)
 
 ## Deliverables Checklist
 - [ ] `tests/Browser/` — Dusk test cases

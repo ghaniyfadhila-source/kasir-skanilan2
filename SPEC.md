@@ -52,22 +52,28 @@
 ## 3. System Architecture
 
 ```
-┌─────────────┐     WiFi/HTTPS      ┌──────────────┐     Realtime/WSS      ┌─────────────┐
-│  ESP8266    │ ◄─────────────────► │  Laravel 11  │ ◄──────────────────►  │   Browser   │
-│  (Console)  │   REST + Queue      │  (API + Web) │   Supabase Realtime   │  (Admin)    │
-└─────────────┘                     └──────────────┘                       └─────────────┘
-       │                                    │                                    │
-       │ SPIFFS Queue                       │ PostgreSQL                          │
-       │ (offline buffer)                   │ (Supabase)                          │
-       ▼                                    ▼                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              Supabase Project (ap-southeast-1)                   │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │ PostgreSQL  │  │  Realtime   │  │   Auth      │  │     Storage             │ │
-│  │  (Primary)  │  │  (WebSocket)│  │  (optional) │  │   (firmware OTA)        │ │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────┐     HTTPS/WS      ┌──────────────┐     Realtime/WSS      ┌─────────────────┐
+│  Cashier Web UI │ ◄─────────────────► │  Laravel 11  │ ◄──────────────────►  │   Admin Panel   │
+│  (HP/Tablet)    │   REST + Realtime │  (API + Web) │   Supabase Realtime   │  (Browser)      │
+└────────┬────────┘                   └──────┬───────┘                       └─────────────────┘
+         │                                   │
+         │           Supabase Realtime       │
+         │     Channel: console:{device_id}  │
+         ▼                                   ▼
+┌─────────────────┐              ┌─────────────────────────────────────────────────────────┐
+│   ESP8266       │ ◄───────────► │                    Supabase Project                      │
+│  (Console)      │  Realtime     │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
+│  RFID + LCD     │               │  │ PostgreSQL  │  │  Realtime   │  │     Storage     │  │
+└─────────────────┘               │  │  (Primary)  │  │ (WebSocket) │  │  (firmware OTA) │  │
+                                  │  └─────────────┘  └─────────────┘  └─────────────────┘  │
+                                  └─────────────────────────────────────────────────────────┘
 ```
+
+### 3.2 Communication Protocols
+- **Cashier Web UI → Backend:** HTTPS REST (JSON) + Supabase Realtime (channel `cashier:{device_id}`)
+- **Console (ESP8266) → Backend:** HTTPS REST + Supabase Realtime (channel `console:{device_id}`) — **Bidirectional**
+- **Admin ↔ Backend:** Standard HTTP + Blade SSR + Alpine.js + Realtime (`admin:dashboard`)
+- **Firmware OTA:** HTTPS download dari Supabase Storage / GitHub Releases
 
 ### 3.2 Communication Protocols
 - **Console → Backend:** HTTPS REST (JSON) + Supabase Realtime channels per console
@@ -167,7 +173,7 @@ menu_items ◄── transactions (1:N) [via transaction_items]
 | buyer_id | UUID | FK → users.id, NOT NULL |
 | cashier_id | UUID | FK → users.id, NOT NULL |
 | total_cents | INT | NOT NULL, CHECK > 0 |
-| status | VARCHAR(20) | DEFAULT 'completed', CHECK IN ('completed','voided','pending_sync') |
+| status | VARCHAR(20) | DEFAULT 'awaiting_rfid', CHECK IN ('awaiting_rfid','completed','voided','pending_sync') |
 | idempotency_key | VARCHAR(64) | UNIQUE, NOT NULL |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 | synced_at | TIMESTAMPTZ | NULLABLE |
@@ -271,12 +277,22 @@ CREATE POLICY "audit_admin" ON audit_logs FOR ALL TO authenticated USING (
 | POST | `/api/auth/forgot-password` | Admin | Generate reset code for user |
 | POST | `/api/auth/reset-password` | None | Reset password with code |
 
-### 6.2 Console (device_id + api_key header)
+### 6.2 Cashier Web UI (device_id + password → Sanctum token)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/console/menu` | Get active menu items by category |
-| POST | `/api/console/transaction` | Submit transaction (idempotent) |
+| POST | `/api/cashier/login` | Cashier login (device_id + password) → returns token |
+| GET | `/api/cashier/menu` | Get active menu items by category |
+| POST | `/api/cashier/order` | Create pending order (awaiting_rfid) {items[], idempotency_key} |
+| GET | `/api/cashier/order/{id}/status` | Poll order status (awaiting_rfid/completed/void) |
+| POST | `/api/cashier/order/{id}/cancel` | Cancel pending order |
+
+### 6.3 Console Hardware (device_id + api_key header)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/console/menu` | Get active menu items by category (cached) |
+| POST | `/api/console/rfid-tap` | Submit RFID UID {rfid_uid, idempotency_key} |
 | GET | `/api/console/balance/{uid}` | Check RFID card balance |
+| POST | `/api/console/heartbeat` | Send status (ip, rssi, firmware) |
 | POST | `/api/console/sync` | Pull pending queue + push status |
 
 ### 6.3 Admin (web + API)
@@ -295,8 +311,9 @@ CREATE POLICY "audit_admin" ON audit_logs FOR ALL TO authenticated USING (
 
 | Channel | Publisher | Subscribers | Payload |
 |---------|-----------|-------------|---------|
-| `console:{device_id}` | Backend | ESP8266 (1) | Menu updates, config changes, OTA trigger |
-| `admin:dashboard` | Backend | Admin browsers (N) | Live stats, new transactions |
+| `console:{device_id}` | Backend ↔ ESP8266 | ESP8266 (1), Backend | **Bidirectional**: Backend→ESP: `awaiting_rfid` (order_id, total), `order_cancelled`, `menu_update`; ESP→Backend: `rfid_tap` (uid), `heartbeat`, `status` |
+| `cashier:{device_id}` | Backend | Cashier Web UI (1) | Order status: `awaiting_rfid`, `completed` (new_balance, receipt_no), `void`, `error` |
+| `admin:dashboard` | Backend | Admin browsers (N) | Live stats, new transactions, console status |
 | `console:status` | ESP8266 | Backend + Admin | Heartbeat, online/offline |
 
 ### 7.1 Message Format
@@ -376,37 +393,56 @@ BOOT → WIFI_CONNECT → REGISTER_DEVICE → MAIN_LOOP
 
 ## 10. Transaction Flow
 
-### 10.1 Happy Path (Online)
+### 10.1 Happy Path (Online) — Web UI + Hardware
 ```
-1. Student tap RFID → ESP reads UID
-2. ESP → Backend: GET /balance/{uid}
-3. Backend → ESP: { balance, user_name, photo_url }
-4. ESP displays balance + name on LCD
-5. Cashier selects menu items on ESP keypad/touch
-6. ESP calculates total, shows confirmation
-7. Cashier confirms → ESP POST /transaction { items, idempotency_key }
-8. Backend: atomic debit buyer, credit cashier, create transaction + items
-9. Backend → ESP: { success, new_balance, receipt_no }
-10. ESP: beep OK, print/show receipt, update LCD
-11. Backend broadcasts to admin:dashboard (live update)
-```
-
-### 10.2 Offline Path
-```
-1-6. Same as above
-7. ESP queues to SPIFFS (pending)
-8. ESP shows "Offline - Queued" + queue count
-9. On WiFi restore: ESP flushes queue batch
-10. Backend processes each with idempotency_key
-12. Backend responds per-item: success/duplicate/void
-13. ESP removes succeeded, retries failed (max 3x)
-14. Items >5 min → auto-void, notify on next LCD
+1. Cashier login Web UI (device_id + password) → dapat token
+2. Cashier pilih menu di Web UI → klik "BAYAR"
+3. Web UI POST /api/cashier/order {items[], idempotency_key}
+4. Backend create transaction (status=awaiting_rfid, total_cents, items JSON)
+5. Backend push ke channel console:{device_id}: {type: "awaiting_rfid", order_id, total_cents}
+6. ESP terima → LCD: "TAP RFID  |  Rp X"
+7. Pembeli tap RFID ke RC522
+8. ESP kirim UID via Realtime (channel console:{device_id}): {type: "rfid_tap", rfid_uid, order_id}
+9. Backend validasi & proses atomic:
+   - RFID UID valid & aktif → dapat user_id (pembeli)
+   - Match dengan order_id awaiting_rfid
+   - Saldo user ≥ total
+   - Stok item cukup (jika ≠ -1)
+   - Kurangi balance_cents user
+   - Kurangi stok item
+   - Update transaction status=completed + transaction_items
+10. Backend push ke ESP: {type: "success", new_balance, receipt_no}
+11. Backend push ke Cashier Web UI (channel cashier:{device_id}): {type: "completed", new_balance, receipt_no}
+12. ESP: beep OK, LCD tampil "SUKSES: Rp X, Saldo: Rp Y"
+13. Web UI tampil sukses + detail transaksi
+14. Backend broadcasts ke admin:dashboard (live update via Realtime)
 ```
 
-### 10.3 Idempotency
+### 10.2 Cancel / Timeout
+```
+- Cashier klik "BATAL" di Web UI → POST /api/cashier/order/{id}/cancel
+- Backend update status=void, push "order_cancelled" ke ESP
+- ESP LCD: "DIBATALKAN"
+- Timeout 60s tanpa RFID tap → auto-cancel (configurable)
+```
+
+### 10.3 Offline Path (Hardware Only)
+```
+1. ESP offline (no WiFi) → LCD: "OFFLINE MODE"
+2. Cashier tetap bisa order di Web UI (jika Web UI online)
+3. Jika ESP offline saat RFID tap:
+   - ESP queue rfid_tap ke SPIFFS (pending_sync)
+   - LCD: "OFFLINE - QUEUED"
+4. On WiFi restore: ESP flush queue via /api/console/sync
+5. Backend proses dengan idempotency_key
+6. Response per-item: success/duplicate/void/insufficient_balance
+7. Items >5 min pending_sync → auto-void
+```
+
+### 10.4 Idempotency
 - **Key format:** `{device_id}-{timestamp_ms}-{random4}`
 - **Server:** UNIQUE constraint on transactions.idempotency_key
-- **Client:** Retry with same key until success/duplicate
+- **Client (Cashier Web UI & ESP):** Retry with same key until success/duplicate
 
 ---
 
@@ -446,24 +482,25 @@ BOOT → WIFI_CONNECT → REGISTER_DEVICE → MAIN_LOOP
 
 ---
 
-## 13. Implementation Tickets (14 Total)
+## 13. Implementation Tickets (15 Total)
 
 | # | Ticket | Branch | Status |
 |---|--------|--------|--------|
 | 01 | Bootstrap Laravel 11 + Supabase + Schema | `main` | ✅ Done |
 | 02 | Admin Login + Shell Dashboard | `ticket-02-admin-login` | ✅ Done |
-| 03 | Console CRUD + Credential Rotation | `ticket-03-console-crud` | ⏳ Pending |
-| 04 | Menu Management (Category + Item) | `ticket-04-menu-crud` | ⏳ Pending |
-| 05 | User Management + RFID Assign | `ticket-05-user-rfid` | ⏳ Pending |
-| 06 | ESP8266 Firmware (PlatformIO) | `ticket-06-firmware` | ⏳ Pending |
-| 07 | Transaction API + Idempotency | `ticket-07-transaction-api` | ⏳ Pending |
-| 08 | Supabase Realtime Integration | `ticket-08-realtime` | ⏳ Pending |
-| 09 | Offline Queue + Auto-void | `ticket-09-offline-queue` | ⏳ Pending |
-| 10 | Reports + Export | `ticket-10-reports` | ⏳ Pending |
-| 11 | Audit Logs + Admin Settings | `ticket-11-audit-settings` | ⏳ Pending |
-| 12 | Forgot Password (Admin Code) | `ticket-12-forgot-password` | ⏳ Pending |
-| 13 | OTA Firmware Update | `ticket-13-ota` | ⏳ Pending |
-| 14 | E2E Testing + Documentation | `ticket-14-e2e-docs` | ⏳ Pending |
+| 03 | Console CRUD + Credential Rotation | `ticket-03-console-crud` | ✅ Done |
+| 04 | Menu Management (Category + Item + Drag-sort + Image) | `ticket-04-menu-crud` | 🔄 In Progress |
+| 05 | **Cashier Web UI** (Order + Awaiting RFID + Realtime) | `ticket-05-cashier-webui` | ⏳ Pending |
+| 06 | User Management + RFID Assign + Balance Top-up | `ticket-06-user-rfid` | ⏳ Pending |
+| 07 | ESP8266 Firmware (RFID tap + LCD + Realtime) | `ticket-07-firmware` | ⏳ Pending |
+| 08 | Transaction API + Idempotency (Order + RFID tap) | `ticket-08-transaction-api` | ⏳ Pending |
+| 09 | Supabase Realtime Integration (3 channels) | `ticket-09-realtime` | ⏳ Pending |
+| 10 | Offline Queue + Auto-void (SPIFFS) | `ticket-10-offline-queue` | ⏳ Pending |
+| 11 | Reports + Export (Daily/Weekly/Monthly) | `ticket-11-reports` | ⏳ Pending |
+| 12 | Audit Logs + Admin Settings | `ticket-12-audit-settings` | ⏳ Pending |
+| 13 | Forgot Password (Admin Code) | `ticket-13-forgot-password` | ⏳ Pending |
+| 14 | OTA Firmware Update | `ticket-14-ota` | ⏳ Pending |
+| 15 | E2E Testing + Documentation | `ticket-15-e2e-docs` | ⏳ Pending |
 
 ---
 
@@ -533,10 +570,12 @@ board_build.flash_mode = dio
 |------|------------|
 | **Console** | Terminal kasir fisik (ESP8266 + RFID + LCD) |
 | **Cashier** | Operator console (role=user, device_id linked) |
+| **Cashier Web UI** | Antarmuka web (HP/Tablet) untuk cashier pilih menu & klik Bayar |
 | **Student** | Pembeli (role=student, balance_cents) |
 | **Device ID** | Unique ID per ESP8266 (format: `ESP-{MAC}`) |
 | **API Key** | 64-char hex, auth untuk console→backend |
 | **Idempotency Key** | Client-generated unique key per transaction |
+| **Awaiting RFID** | Status transaksi menunggu tap RFID pembeli |
 | **SPIFFS** | SPI Flash File System (ESP8266 persistent storage) |
 | **RLS** | Row Level Security (PostgreSQL policy) |
 | **OTA** | Over-The-Air firmware update |
