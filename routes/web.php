@@ -57,6 +57,42 @@ Route::prefix('admin')->name('admin.')->group(function () {
     });
 });
 
+// Cashier Web UI Routes
+Route::prefix('cashier')->name('cashier.')->group(function () {
+    Route::middleware('guest')->group(function () {
+        Route::get('/login', function () {
+            $consoles = \App\Models\Console::where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'device_id', 'name']);
+            return view('cashier.login', compact('consoles'));
+        })->name('login');
+        
+        Route::post('/login', function (Illuminate\Http\Request $request) {
+            $request->validate([
+                'device_id' => 'required|exists:consoles,device_id',
+                'password' => 'required|string',
+            ]);
+            
+            // This will be handled by the frontend calling the API
+            return redirect()->route('cashier.menu')->with('device_id', $request->device_id);
+        })->name('login.post');
+    });
+
+    Route::middleware(['auth:sanctum', 'cashier'])->group(function () {
+        Route::get('/menu', function () {
+            return view('cashier.menu');
+        })->name('menu');
+
+        Route::get('/awaiting/{orderId}', function (string $orderId) {
+            return view('cashier.awaiting', compact('orderId'));
+        })->name('awaiting');
+
+        Route::get('/success/{orderId}', function (string $orderId) {
+            return view('cashier.success', compact('orderId'));
+        })->name('success');
+    });
+});
+
 // Fallback login route for auth middleware (redirects to admin login)
 Route::get('/login', function () {
     return redirect()->route('admin.login');

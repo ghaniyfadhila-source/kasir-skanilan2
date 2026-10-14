@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignUuid('console_id')->constrained();
             $table->foreignUuid('user_id')->nullable()->constrained()->nullOnDelete(); // pembeli
             $table->foreignUuid('cashier_id')->nullable()->constrained('users')->nullOnDelete(); // kasir
-            $table->json('items'); // [{"menu_item_id":..., "qty":2, "price_cents":15000, "name":"Nasi Goreng"}]
+            $table->json('items')->nullable(); // [{"menu_item_id":..., "qty":2, "price_cents":15000, "name":"Nasi Goreng"}]
             $table->bigInteger('total_cents');
             $table->string('status', 20)->default('pending'); // pending | completed | voided | refunded
             $table->string('idempotency_key', 64)->unique();

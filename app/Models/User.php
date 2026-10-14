@@ -9,10 +9,11 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasUuids;
+    use HasFactory, Notifiable, HasUuids, HasApiTokens;
 
     protected $keyType = 'uuid';
     public $incrementing = false;
@@ -23,6 +24,7 @@ class User extends Authenticatable
         'password',
         'role',
         'balance_cents',
+        'device_id',
     ];
 
     protected $hidden = [
