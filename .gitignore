@@ -24,3 +24,5 @@ yarn-error.log
 
 /php/
 /php.zip
+composer-setup.php
+composer.phar
