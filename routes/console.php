@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Ticket 08: order `awaiting_rfid` yang lewat 60 detik dibatalkan otomatis.
 Schedule::command('orders:void-expired')->everyMinute()->withoutOverlapping();
+
+// Ticket 13: bersihkan kode reset yang sudah tidak berguna.
+Schedule::command('password-resets:prune')->dailyAt('02:15')->withoutOverlapping();

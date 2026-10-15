@@ -8,8 +8,8 @@ use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\Category;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -35,16 +35,7 @@ class OrderController extends Controller
             ], 401);
         }
 
-        // Verify console password (stored as hash in console_credentials)
-        $credential = $console->credentials;
-        if (!$credential || !\Illuminate\Support\Facades\Hash::check($validated['password'], $credential->password_hash)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid device_id or password.'
-            ], 401);
-        }
-
-        // Get or create cashier user for this console
+        // Kasir yang terkait dengan console ini
         $cashier = \App\Models\User::where('device_id', $console->device_id)
             ->where('role', 'cashier')
             ->first();
@@ -54,6 +45,25 @@ class OrderController extends Controller
                 'success' => false,
                 'message' => 'No cashier user linked to this console. Contact admin.'
             ], 403);
+        }
+
+        // Password Cashier Web UI bisa berupa salah satu dari:
+        // 1. password konsol (console_credentials) - kata sandi perangkat
+        // 2. password user kasir - yang bisa di-reset admin lewat menu Reset Password
+        // Menerima keduanya supaya reset password benar-benar berguna; kalau
+        // hanya password konsol yang berlaku, reset password kasir jadi sia-sia.
+        $credential = $console->credentials;
+
+        $matchesConsolePassword = $credential
+            && Hash::check($validated['password'], $credential->password_hash);
+
+        $matchesUserPassword = Hash::check($validated['password'], $cashier->password);
+
+        if (! $matchesConsolePassword && ! $matchesUserPassword) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid device_id or password.'
+            ], 401);
         }
 
         // Create Sanctum token

@@ -4,10 +4,12 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\ConsoleController;
+use App\Http\Controllers\Admin\ForgotPasswordController;
 use App\Http\Controllers\Admin\MenuController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\PublicPasswordResetController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -89,6 +91,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::put('/', [SettingController::class, 'update'])->name('update');
             Route::put('/password', [SettingController::class, 'updatePassword'])->name('password');
         });
+
+        // Password Reset Routes (admin membuat kode untuk user lain)
+        Route::prefix('password-resets')->name('password-resets.')->group(function () {
+            Route::get('/', [ForgotPasswordController::class, 'create'])->name('create');
+            Route::post('/', [ForgotPasswordController::class, 'store'])->name('store');
+            Route::delete('/{user}', [ForgotPasswordController::class, 'destroy'])->name('destroy');
+        });
     });
 });
 
@@ -132,3 +141,9 @@ Route::prefix('cashier')->name('cashier.')->group(function () {
 // Laravel). Langsung merender form login admin agar tidak ada redirect ganda.
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [LoginController::class, 'login'])->name('login.post.alias');
+
+// Reset password publik: tanpa login, memakai kode 6 digit dari admin.
+Route::prefix('password')->name('password.')->group(function () {
+    Route::get('/reset', [PublicPasswordResetController::class, 'show'])->name('reset');
+    Route::post('/reset', [PublicPasswordResetController::class, 'verify'])->name('reset.verify');
+});

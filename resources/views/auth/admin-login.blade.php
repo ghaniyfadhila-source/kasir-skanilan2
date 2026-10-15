@@ -5,6 +5,12 @@
             <p class="mt-2 text-gray-600">Masukkan kredensial admin untuk mengakses dashboard</p>
         </div>
 
+        @if (session('success'))
+            <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p class="text-sm text-green-800">{{ session('success') }}</p>
+            </div>
+        @endif
+
         @if ($errors->any())
             <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
                 <ul class="text-sm text-red-700 space-y-1">
@@ -64,7 +70,8 @@
             </button>
         </form>
 
-        <div class="mt-6 text-center text-sm text-gray-500">
+        <div class="mt-6 text-center text-sm text-gray-500 space-y-1">
+            <p>Lupa password? <a href="{{ route('password.reset') }}" class="text-blue-600 hover:underline font-medium">Reset dengan kode</a></p>
             <p>Kembali ke <a href="{{ url('/') }}" class="text-blue-600 hover:underline">halaman utama</a></p>
         </div>
     </div>
