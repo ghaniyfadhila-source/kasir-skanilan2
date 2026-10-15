@@ -80,7 +80,7 @@ class OrderController extends Controller
 
     public function menu(Request $request)
     {
-        $console = $request->console;
+        $console = $this->console($request);
 
         $categories = Category::with(['menuItems' => function ($q) {
             $q->where('is_active', true)
@@ -121,7 +121,7 @@ class OrderController extends Controller
 
     public function store(Request $request)
     {
-        $console = $request->console;
+        $console = $this->console($request);
         $cashier = $request->user();
 
         // Manual validation to return proper format
@@ -142,19 +142,11 @@ class OrderController extends Controller
 
         $validated = $validator->validated();
 
-        // Check idempotency
+        // Idempotensi: request ulang dengan kunci sama harus mengembalikan order
+        // yang sama, bukan membuat order baru.
         $existing = Transaction::where('idempotency_key', $validated['idempotency_key'])->first();
         if ($existing) {
-            return response()->json([
-                'success' => true,
-                'duplicate' => true,
-                'data' => [
-                    'order_id' => $existing->id,
-                    'total_cents' => $existing->total_cents,
-                    'status' => $existing->status,
-                    'expires_at' => $existing->created_at->addSeconds(60)->toISOString(),
-                ]
-            ]);
+            return $this->orderResponse($existing, duplicate: true, status: 200);
         }
 
         // Validate items and calculate total
@@ -200,7 +192,8 @@ class OrderController extends Controller
                 'console_id' => $console->id,
                 'cashier_id' => $cashier->id,
                 'total_cents' => $totalCents,
-                'status' => 'awaiting_rfid',
+                'status' => Transaction::STATUS_AWAITING_RFID,
+                'expires_at' => now()->addSeconds(Transaction::RFID_TAP_TIMEOUT_SECONDS),
                 'idempotency_key' => $validated['idempotency_key'],
             ]);
 
@@ -222,20 +215,26 @@ class OrderController extends Controller
             'items_count' => count($transactionItems),
         ]);
 
-        // Broadcast to console via Realtime (will be implemented in Ticket 09)
-        // For now, we'll just return the order info
-        $expiresAt = $transaction->created_at->addSeconds(60);
+        // Broadcast ke console via Realtime (akan diimplementasikan di Ticket 09)
+        return $this->orderResponse($transaction);
+    }
 
+    /**
+     * Bentuk respons order yang konsisten untuk create maupun duplicate.
+     */
+    private function orderResponse(Transaction $transaction, bool $duplicate = false, int $status = 201): \Illuminate\Http\JsonResponse
+    {
         return response()->json([
             'success' => true,
+            'duplicate' => $duplicate,
             'data' => [
                 'order_id' => $transaction->id,
-                'total_cents' => $totalCents,
-                'total_formatted' => 'Rp ' . number_format($totalCents / 100, 0, ',', '.'),
-                'status' => 'awaiting_rfid',
-                'expires_at' => $expiresAt->toISOString(),
-            ]
-        ], 201);
+                'total_cents' => $transaction->total_cents,
+                'total_formatted' => 'Rp ' . number_format($transaction->total_cents / 100, 0, ',', '.'),
+                'status' => $transaction->status,
+                'expires_at' => $transaction->expires_at?->toIso8601String(),
+            ],
+        ], $status);
     }
 
     public function status(Request $request, string $id)
@@ -243,9 +242,9 @@ class OrderController extends Controller
         $cashier = $request->user();
 
         $transaction = Transaction::where('id', $id)
-            ->where('console_id', $request->console->id)
+            ->where('console_id', $this->console($request)->id)
             ->where('cashier_id', $cashier->id)
-            ->with('transactionItems.menuItem')
+            ->with('transactionItems.menuItem', 'buyer')
             ->firstOrFail();
 
         $data = [
@@ -253,19 +252,24 @@ class OrderController extends Controller
             'total_cents' => $transaction->total_cents,
             'total_formatted' => 'Rp ' . number_format($transaction->total_cents / 100, 0, ',', '.'),
             'status' => $transaction->status,
-            'items' => $transaction->transactionItems->map(fn($i) => [
+            'expires_at' => $transaction->expires_at?->toIso8601String(),
+            'items' => $transaction->transactionItems->map(fn ($i) => [
                 'name' => $i->menuItem?->name,
                 'quantity' => $i->quantity,
                 'unit_price_cents' => $i->unit_price_cents,
                 'subtotal_cents' => $i->subtotalCents(),
-            ]),
+            ])->values(),
         ];
 
-        if ($transaction->status === 'completed') {
+        if ($transaction->isCompleted()) {
             $data['receipt_no'] = $transaction->receipt_no;
             $data['buyer_name'] = $transaction->buyer?->name;
             $data['new_balance_cents'] = $transaction->buyer?->balance_cents;
-            $data['completed_at'] = $transaction->synced_at?->toISOString();
+            $data['completed_at'] = $transaction->completed_at?->toIso8601String();
+        }
+
+        if ($transaction->isVoided() && $transaction->error_message) {
+            $data['error_message'] = $transaction->error_message;
         }
 
         return response()->json([
@@ -279,20 +283,45 @@ class OrderController extends Controller
         $cashier = $request->user();
 
         $transaction = Transaction::where('id', $id)
-            ->where('console_id', $request->console->id)
+            ->where('console_id', $this->console($request)->id)
             ->where('cashier_id', $cashier->id)
-            ->where('status', 'awaiting_rfid')
             ->firstOrFail();
 
-        $transaction->update(['status' => 'voided']);
+        // Order yang sudah dibayar tidak boleh dibatalkan di sini — dana sudah
+        // keluar dari saldo pembeli. Pengembalian dana belum ada di v1.
+        if (! $transaction->isAwaitingRfid()) {
+            return response()->json([
+                'success' => false,
+                'error_code' => 'order_not_cancellable',
+                'message' => 'Order tidak dapat dibatalkan karena sudah diproses.',
+            ], 422);
+        }
+
+        $transaction->forceFill([
+            'status' => Transaction::STATUS_VOIDED,
+            'voided_at' => now(),
+            'voided_by' => $cashier->id,
+            'error_code' => 'CANCELLED_BY_CASHIER',
+            'error_message' => 'Dibatalkan oleh kasir.',
+        ])->save();
+
+        \App\Models\AuditLog::create([
+            'console_id' => $transaction->console_id,
+            'user_id' => $cashier->id,
+            'action' => 'transaction.voided_by_cashier',
+            'metadata' => [
+                'transaction_id' => $transaction->id,
+                'total_cents' => $transaction->total_cents,
+            ],
+        ]);
 
         Log::channel('audit')->info('Order cancelled by cashier', [
             'transaction_id' => $transaction->id,
             'cashier_id' => $cashier->id,
         ]);
 
-        // Broadcast order_cancelled to console (Ticket 09)
-        
+        // Broadcast order_cancelled ke console (Ticket 09)
+
         return response()->json([
             'success' => true,
             'message' => 'Order dibatalkan.',

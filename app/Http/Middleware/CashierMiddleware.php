@@ -47,8 +47,9 @@ class CashierMiddleware
             ], 403);
         }
 
-        // Attach console to request for easy access
-        $request->merge(['console' => $console]);
+        // Attach console to request attributes (NOT input, supaya tidak ikut
+        // masuk $request->all() / validasi / log).
+        $request->attributes->set('console', $console);
 
         return $next($request);
     }

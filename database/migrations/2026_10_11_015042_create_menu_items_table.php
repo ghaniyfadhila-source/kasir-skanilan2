@@ -13,7 +13,8 @@ return new class extends Migration
             $table->foreignUuid('category_id')->nullable()->constrained()->nullOnDelete();
             $table->string('name', 255);
             $table->bigInteger('price_cents');
-            $table->integer('stock')->default(0); // 0 = unlimited
+            // -1 = unlimited (tanpa batas stok), 0 = habis. Lihat SPEC.md §menu_items.
+            $table->integer('stock')->default(-1);
             $table->text('image_url')->nullable();
             $table->boolean('is_active')->default(true);
             $table->integer('sort_order')->default(0);

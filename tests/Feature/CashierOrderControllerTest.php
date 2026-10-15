@@ -351,16 +351,22 @@ class CashierOrderControllerTest extends TestCase
         $transaction = Transaction::create([
             'console_id' => $this->console->id,
             'cashier_id' => $this->cashier->id,
-            'buyer_id' => User::factory()->create(['role' => 'student'])->id,
+            'user_id' => User::factory()->create(['role' => 'student'])->id,
             'total_cents' => 1500000,
-            'status' => 'completed',
+            'status' => Transaction::STATUS_COMPLETED,
             'idempotency_key' => 'test-completed-' . time(),
         ]);
 
         $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
             ->postJson("/api/cashier/orders/{$transaction->id}/cancel");
 
-        $response->assertStatus(404); // Not found because status is not awaiting_rfid
+        // Order-nya ada, jadi 404 menyesatkan. 422 lebih tepat: aksi valid,
+        // tapi resource-nya sudah tidak dalam status yang boleh dibatalkan.
+        $response->assertStatus(422)
+            ->assertJsonPath('error_code', 'order_not_cancellable');
+
+        $this->assertSame(Transaction::STATUS_COMPLETED, $transaction->refresh()->status);
+        $this->assertNull($transaction->voided_at);
     }
 
     public function test_cashier_order_unlimited_stock(): void
