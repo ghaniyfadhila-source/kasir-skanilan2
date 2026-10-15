@@ -114,6 +114,21 @@ class Transaction extends Model
         return $query->awaitingRfid()->whereNotNull('expires_at')->where('expires_at', '<=', now());
     }
 
+    /**
+     * Transaksi selesai dalam rentang tanggal [start, end] (inklusive).
+     * Basis laporan selalu transaksi `completed` — order batal tidak menghasilkan
+     * pendapatan dan tap yang belum selesai tidak boleh dihitung.
+     */
+    public function scopeCompletedBetween(Builder $query, $start, $end): Builder
+    {
+        return $query
+            ->where('status', self::STATUS_COMPLETED)
+            ->whereBetween('completed_at', [
+                \Illuminate\Support\Carbon::parse($start)->startOfDay(),
+                \Illuminate\Support\Carbon::parse($end)->endOfDay(),
+            ]);
+    }
+
     // ------------------------------------------------------------------
     // State
     // ------------------------------------------------------------------

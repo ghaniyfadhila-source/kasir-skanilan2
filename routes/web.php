@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\ConsoleController;
 use App\Http\Controllers\Admin\MenuController;
+use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\UserController;
 
 Route::get('/', function () {
@@ -66,6 +67,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // Balance Top-up
         Route::post('/users/{user}/topup', [UserController::class, 'topUp'])->name('users.topup');
+
+        // Reports Routes
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('/', [ReportController::class, 'index'])->name('index');
+            Route::get('/data', [ReportController::class, 'data'])->name('data');
+            Route::get('/export', [ReportController::class, 'export'])->name('export');
+        });
     });
 });
 
