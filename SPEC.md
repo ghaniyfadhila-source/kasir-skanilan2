@@ -1,4 +1,4 @@
-# Kasir Skanilan 2 — Technical Specification
+﻿# Kasir Skanilan 2 — Technical Specification
 
 **Version:** 1.0  
 **Date:** 2026-10-11  
@@ -489,9 +489,9 @@ BOOT → WIFI_CONNECT → REGISTER_DEVICE → MAIN_LOOP
 | 01 | Bootstrap Laravel 11 + Supabase + Schema | `main` | ✅ Done |
 | 02 | Admin Login + Shell Dashboard | `ticket-02-admin-login` | ✅ Done |
 | 03 | Console CRUD + Credential Rotation | `ticket-03-console-crud` | ✅ Done |
-| 04 | Menu Management (Category + Item + Drag-sort + Image) | `ticket-04-menu-crud` | 🔄 In Progress |
-| 05 | **Cashier Web UI** (Order + Awaiting RFID + Realtime) | `ticket-05-cashier-webui` | ⏳ Pending |
-| 06 | User Management + RFID Assign + Balance Top-up | `ticket-06-user-rfid` | ⏳ Pending |
+| 04 | Menu Management (Category + Item + Drag-sort + Image) | `ticket-04-menu-crud` | ✅ Done (831cf75) |
+| 05 | **Cashier Web UI** (Order + Awaiting RFID + Realtime) | `ticket-05-cashier-webui` | ✅ Done (dc02f40) |
+| 06 | User Management + RFID Assign + Balance Top-up | `ticket-06-user-rfid` | ✅ Done (7b84923) |
 | 07 | ESP8266 Firmware (RFID tap + LCD + Realtime) | `ticket-07-firmware` | ⏳ Pending |
 | 08 | Transaction API + Idempotency (Order + RFID tap) | `ticket-08-transaction-api` | ⏳ Pending |
 | 09 | Supabase Realtime Integration (3 channels) | `ticket-09-realtime` | ⏳ Pending |
