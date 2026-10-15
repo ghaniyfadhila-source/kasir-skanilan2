@@ -497,7 +497,7 @@ BOOT → WIFI_CONNECT → REGISTER_DEVICE → MAIN_LOOP
 | 09 | Supabase Realtime Integration (3 channels) | `ticket-09-realtime` | ⏳ Pending |
 | 10 | Offline Queue + Auto-void (SPIFFS) | `ticket-10-offline-queue` | ⏳ Pending |
 | 11 | Reports + Export (Daily/Weekly/Monthly) | `ticket-11-reports` | ✅ Done (9c26840) |
-| 12 | Audit Logs + Admin Settings | `ticket-12-audit-settings` | ⏳ Pending |
+| 12 | Audit Logs + Admin Settings | `ticket-12-audit-settings` | ✅ Done (31727ce) |
 | 13 | Forgot Password (Admin Code) | `ticket-13-forgot-password` | ⏳ Pending |
 | 14 | OTA Firmware Update | `ticket-14-ota` | ⏳ Pending |
 | 15 | E2E Testing + Documentation | `ticket-15-e2e-docs` | ⏳ Pending |
