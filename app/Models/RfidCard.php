@@ -19,12 +19,14 @@ class RfidCard extends Model
         'rfid_uid',
         'label',
         'is_active',
+        'revoked_at',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'revoked_at' => 'datetime',
         ];
     }
 

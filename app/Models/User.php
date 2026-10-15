@@ -7,8 +7,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -79,5 +79,68 @@ class User extends Authenticatable
     public function isCashier(): bool
     {
         return $this->role === 'cashier';
+    }
+
+    public function transactionItems(): HasMany
+    {
+        return $this->hasMany(TransactionItem::class);
+    }
+
+    /** Kartu RFID yang masih aktif (belum dicabut). */
+    public function activeRfidCards(): HasMany
+    {
+        return $this->hasMany(RfidCard::class)
+            ->whereNull('revoked_at')
+            ->where('is_active', true);
+    }
+
+    /**
+     * Pasang kartu RFID ke user. UID dinormalisasi ke huruf besar.
+     */
+    public function assignRfid(string $rfidUid, ?string $label = null): RfidCard
+    {
+        return $this->rfidCards()->create([
+            'rfid_uid' => strtoupper($rfidUid),
+            'label' => $label,
+            'is_active' => true,
+        ]);
+    }
+
+    public function revokeRfid(string $rfidCardId): bool
+    {
+        $card = $this->rfidCards()->find($rfidCardId);
+        if (!$card) {
+            return false;
+        }
+        $card->update([
+            'is_active' => false,
+            'revoked_at' => now(),
+        ]);
+        return true;
+    }
+
+    /**
+     * Tambah saldo user. Saldo disimpan dalam sen (cents).
+     * Keterangan dicatat pada audit_logs sebagai jejak=topup.
+     */
+    public function topUp(int $amountCents, ?string $description = null): int
+    {
+        if ($amountCents <= 0) {
+            throw new \InvalidArgumentException('Nominal top-up harus lebih dari 0.');
+        }
+
+        DB::transaction(function () use ($amountCents, $description) {
+            $this->increment('balance_cents', $amountCents);
+
+            $this->auditLogs()->create([
+                'action' => 'balance.topup',
+                'metadata' => [
+                    'amount_cents' => $amountCents,
+                    'description' => $description,
+                ],
+            ]);
+        });
+
+        return $this->fresh()->balance_cents;
     }
 }

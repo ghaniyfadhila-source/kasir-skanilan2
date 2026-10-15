@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\ConsoleController;
 use App\Http\Controllers\Admin\MenuController;
+use App\Http\Controllers\Admin\UserController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -54,6 +55,17 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/items/{item}', [MenuController::class, 'itemsDestroy'])->name('items.destroy');
             Route::post('/items/reorder', [MenuController::class, 'itemsReorder'])->name('items.reorder');
         });
+
+        // User Management Routes
+        Route::resource('users', UserController::class)->except(['destroy']);
+        Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+
+        // RFID Card Routes
+        Route::post('/users/{user}/rfid', [UserController::class, 'storeRfid'])->name('users.rfid.store');
+        Route::delete('/users/{user}/rfid/{rfidCard}', [UserController::class, 'destroyRfid'])->name('users.rfid.destroy');
+
+        // Balance Top-up
+        Route::post('/users/{user}/topup', [UserController::class, 'topUp'])->name('users.topup');
     });
 });
 
@@ -93,7 +105,7 @@ Route::prefix('cashier')->name('cashier.')->group(function () {
     });
 });
 
-// Fallback login route for auth middleware (redirects to admin login)
-Route::get('/login', function () {
-    return redirect()->route('admin.login');
-})->name('login');
+// Alias top-level untuk middleware auth (nama route "login" yang dicari
+// Laravel). Langsung merender form login admin agar tidak ada redirect ganda.
+Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
+Route::post('/login', [LoginController::class, 'login'])->name('login.post.alias');

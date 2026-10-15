@@ -61,7 +61,7 @@
                 </div>
             @else
                 <div class="overflow-x-auto">
-                    <table class="w-full" x-data="consoleTable()">
+                    <table class="w-full">
                         <thead class="bg-gray-50 border-b border-gray-200">
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device ID</th>

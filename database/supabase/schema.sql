@@ -14,6 +14,7 @@ CREATE TABLE users (
     email_verified_at TIMESTAMPTZ,
     remember_token VARCHAR(100),
     balance_cents BIGINT NOT NULL DEFAULT 0,
+    device_id VARCHAR(17), -- FK consoles.device_id, diisi setelah tabel consoles dibuat
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -22,10 +23,11 @@ CREATE TABLE users (
 CREATE TABLE rfid_cards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    rfid_uid CHAR(14) UNIQUE NOT NULL,
+    rfid_uid CHAR(8) UNIQUE NOT NULL,
     label VARCHAR(100),
     is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT now()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    revoked_at TIMESTAMPTZ
 );
 
 -- Consoles
@@ -43,6 +45,14 @@ CREATE TABLE consoles (
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Cashier ↔ Console binding (setelah tabel consoles ada)
+ALTER TABLE users
+    ADD CONSTRAINT users_device_id_fkey
+    FOREIGN KEY (device_id) REFERENCES consoles(device_id) ON DELETE SET NULL;
+CREATE INDEX idx_users_device_id ON users(device_id);
+CREATE UNIQUE INDEX idx_users_device_id_unique ON users(device_id)
+    WHERE device_id IS NOT NULL AND role = 'cashier';
 
 -- Console Credentials
 CREATE TABLE console_credentials (
@@ -101,7 +111,7 @@ CREATE INDEX idx_transactions_idempotency ON transactions(idempotency_key);
 
 -- Audit Logs
 CREATE TABLE audit_logs (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     console_id UUID REFERENCES consoles(id),
     user_id UUID REFERENCES users(id),
     action VARCHAR(100) NOT NULL,

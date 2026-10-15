@@ -112,6 +112,15 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Jejak audit aplikasi: perubahan data oleh admin (konsol, menu, user, saldo).
+        'audit' => [
+            'driver' => 'daily',
+            'level' => 'info',
+            'path' => storage_path('logs/audit.log'),
+            'days' => (int) env('LOG_AUDIT_DAYS', 90),
+            'replace_placeholders' => true,
+        ],
+
         'errorlog' => [
             'driver' => 'errorlog',
             'level' => env('LOG_LEVEL', 'debug'),

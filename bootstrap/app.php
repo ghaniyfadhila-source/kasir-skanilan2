@@ -18,5 +18,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Routenamed "login" sudah diarahkan ke halaman login admin,
+        // jadi middleware auth cukup mengikuti default Laravel.
     })->create();

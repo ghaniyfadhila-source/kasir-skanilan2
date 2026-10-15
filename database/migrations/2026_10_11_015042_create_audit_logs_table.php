@@ -9,7 +9,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('audit_logs', function (Blueprint $table) {
-            $table->bigIncrements('id');
+            // SPEC: audit_logs.id = UUID PK (konsisten dengan tabel lain,
+            // model AuditLog memakai trait HasUuids).
+            $table->uuid('id')->primary();
             $table->foreignUuid('console_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignUuid('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('action', 100);
