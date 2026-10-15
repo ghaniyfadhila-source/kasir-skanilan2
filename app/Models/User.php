@@ -121,7 +121,9 @@ class User extends Authenticatable
 
     /**
      * Tambah saldo user. Saldo disimpan dalam sen (cents).
-     * Keterangan dicatat pada audit_logs sebagai jejak=topup.
+     *
+     * Jejak audit TIDAK ditulis di sini karena aktornya (admin yang menekan
+     * tombol) hanya diketahui di lapisan controller.
      */
     public function topUp(int $amountCents, ?string $description = null): int
     {
@@ -129,16 +131,8 @@ class User extends Authenticatable
             throw new \InvalidArgumentException('Nominal top-up harus lebih dari 0.');
         }
 
-        DB::transaction(function () use ($amountCents, $description) {
+        DB::transaction(function () use ($amountCents) {
             $this->increment('balance_cents', $amountCents);
-
-            $this->auditLogs()->create([
-                'action' => 'balance.topup',
-                'metadata' => [
-                    'amount_cents' => $amountCents,
-                    'description' => $description,
-                ],
-            ]);
         });
 
         return $this->fresh()->balance_cents;

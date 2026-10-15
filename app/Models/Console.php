@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -11,10 +12,24 @@ use Illuminate\Support\Str;
 
 class Console extends Model
 {
-    use HasFactory, HasUuids;
+    use Auditable, HasFactory, HasUuids;
 
     protected $keyType = 'uuid';
     public $incrementing = false;
+
+    public function auditPrefix(): string
+    {
+        return 'console';
+    }
+
+    /**
+     * Field heartbeat dikecualikan: berubah tiap menit dan akan memenuhi
+     * tabel audit dengan noise.
+     */
+    public function auditWhitelistedAttributes(): array
+    {
+        return ['device_id', 'name', 'location', 'status', 'is_active'];
+    }
 
     protected $fillable = [
         'device_id',

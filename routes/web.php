@@ -1,10 +1,12 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\ConsoleController;
 use App\Http\Controllers\Admin\MenuController;
 use App\Http\Controllers\Admin\ReportController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\UserController;
 
 Route::get('/', function () {
@@ -73,6 +75,19 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/', [ReportController::class, 'index'])->name('index');
             Route::get('/data', [ReportController::class, 'data'])->name('data');
             Route::get('/export', [ReportController::class, 'export'])->name('export');
+        });
+
+        // Audit Log Routes
+        Route::prefix('audit-logs')->name('audit-logs.')->group(function () {
+            Route::get('/', [AuditLogController::class, 'index'])->name('index');
+            Route::get('/export', [AuditLogController::class, 'export'])->name('export');
+        });
+
+        // Settings Routes
+        Route::prefix('settings')->name('settings.')->group(function () {
+            Route::get('/', [SettingController::class, 'index'])->name('index');
+            Route::put('/', [SettingController::class, 'update'])->name('update');
+            Route::put('/password', [SettingController::class, 'updatePassword'])->name('password');
         });
     });
 });

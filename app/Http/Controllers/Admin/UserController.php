@@ -6,10 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Console;
 use App\Models\RfidCard;
 use App\Models\User;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -18,6 +17,10 @@ class UserController extends Controller
 {
     /** Rupiah → sen (cents). */
     private const RUPIAH_TO_CENTS = 100;
+
+    public function __construct(private readonly AuditLogger $auditLog)
+    {
+    }
 
     public function index(Request $request)
     {
@@ -87,7 +90,7 @@ class UserController extends Controller
             ]);
         });
 
-        $this->audit('user.created', $user, [
+        $this->audit(AuditLogger::ACT_USER_CREATED, $user, [
             'role' => $user->role,
             'device_id' => $user->device_id,
         ]);
@@ -167,7 +170,7 @@ class UserController extends Controller
 
         $user->save();
 
-        $this->audit('user.updated', $user, [
+        $this->audit(AuditLogger::ACT_USER_UPDATED, $user, [
             'role' => $user->role,
             'device_id' => $user->device_id,
             'password_changed' => $plainPassword !== null,
@@ -201,7 +204,7 @@ class UserController extends Controller
         // Kartu RFID ikut terhapus lewat cascade di level database.
         $user->delete();
 
-        $this->audit('user.deleted', null, $snapshot);
+        $this->audit(AuditLogger::ACT_USER_DELETED, null, $snapshot);
 
         return redirect()->route('admin.users.index')
             ->with('success', 'User berhasil dihapus.');
@@ -220,7 +223,7 @@ class UserController extends Controller
 
         $card = $user->assignRfid($validated['rfid_uid'], $validated['label'] ?? null);
 
-        $this->audit('rfid.assigned', $user, [
+        $this->audit(AuditLogger::ACT_RFID_ASSIGNED, $user, [
             'rfid_card_id' => $card->id,
             'rfid_uid' => $card->rfid_uid,
             'label' => $card->label,
@@ -239,7 +242,7 @@ class UserController extends Controller
 
         $user->revokeRfid($rfidCard->id);
 
-        $this->audit('rfid.revoked', $user, [
+        $this->audit(AuditLogger::ACT_RFID_REVOKED, $user, [
             'rfid_card_id' => $rfidCard->id,
             'rfid_uid' => $rfidCard->rfid_uid,
         ]);
@@ -266,6 +269,12 @@ class UserController extends Controller
             ((int) $validated['amount']) * self::RUPIAH_TO_CENTS,
             $validated['description'] ?? null,
         );
+
+        $this->audit(AuditLogger::ACT_BALANCE_TOPUP, $user, [
+            'amount_cents' => ((int) $validated['amount']) * self::RUPIAH_TO_CENTS,
+            'description' => $validated['description'] ?? null,
+            'balance_after_cents' => $newBalance,
+        ]);
 
         return back()
             ->with('success', 'Saldo berhasil ditambahkan.')
@@ -318,12 +327,12 @@ class UserController extends Controller
         }
     }
 
-    /** Catat jejak audit aplikasi (channel terpisah dari audit_logs tabel). */
-    private function audit(string $action, ?User $user, array $context = []): void
-    {
-        Log::channel('audit')->info($action, array_merge($context, [
-            'subject_user_id' => $user?->id,
-            'admin_id' => Auth::id(),
-        ]));
+    /** Catat jejak audit ke tabel `audit_logs`. */
+    private function audit(
+        string $action,
+        ?User $subject,
+        array $context = []
+    ): void {
+        $this->auditLog->log($action, $context, null, $subject?->id);
     }
 }

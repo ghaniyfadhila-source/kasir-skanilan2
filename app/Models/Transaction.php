@@ -34,8 +34,20 @@ class Transaction extends Model
         self::STATUS_PENDING_SYNC,
     ];
 
-    /** Order menunggu tap RFID selama 60 detik. */
+    /** Nilai bawaan bila pengaturan `order.rfid_timeout_seconds` belum diisi. */
     public const RFID_TAP_TIMEOUT_SECONDS = 60;
+
+    /**
+     * Batas tunggu tap RFID dalam detik, dibaca dari pengaturan aplikasi
+     * supaya admin bisa mengubahnya tanpa deploy ulang.
+     *
+     * Key memakai underscore, bukan titik: Laravel mem-parsing nama atribut
+     * validasi dengan notasi titik.
+     */
+    public static function rfidTimeoutSeconds(): int
+    {
+        return (int) Setting::get('order_rfid_timeout_seconds', self::RFID_TAP_TIMEOUT_SECONDS);
+    }
 
     protected $keyType = 'uuid';
 

@@ -12,12 +12,6 @@
             </a>
         </div>
 
-        @if (session('success'))
-            <div class="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
-                <div class="text-green-800">{{ session('success') }}</div>
-            </div>
-        @endif
-
         @if (session('credentials') || session('rotated_credentials'))
             @php
                 $creds = session('credentials') ?? session('rotated_credentials');

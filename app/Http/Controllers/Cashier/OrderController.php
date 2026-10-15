@@ -193,7 +193,7 @@ class OrderController extends Controller
                 'cashier_id' => $cashier->id,
                 'total_cents' => $totalCents,
                 'status' => Transaction::STATUS_AWAITING_RFID,
-                'expires_at' => now()->addSeconds(Transaction::RFID_TAP_TIMEOUT_SECONDS),
+                'expires_at' => now()->addSeconds(Transaction::rfidTimeoutSeconds()),
                 'idempotency_key' => $validated['idempotency_key'],
             ]);
 
