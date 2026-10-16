@@ -42,6 +42,35 @@ return [
             'synchronous' => null,
         ],
 
+        /*
+         * Koneksi Supabase, terpisah dari koneksi utama.
+         *
+         * Pengembangan lokal memakai SQLite dan sering tidak bisa menjangkau
+         * Supabase sama sekali (jaringan tanpa IPv4, atau region pooler yang
+         * berbeda). Karena itu detail koneksi Supabase disimpan di blok env
+         * sendiri (SUPABASE_DB_*) dan tidak memakai variabel DB_*.
+         *
+         * Beralih ke Supabase cukup dengan:
+         *     DB_CONNECTION=supabase
+         *
+         * sementara `php artisan supabase:check` bisa memeriksa Supabase tanpa
+         * mengubah koneksi yang dipakai aplikasi.
+         */
+        'supabase' => [
+            'driver' => 'pgsql',
+            'url' => env('SUPABASE_DB_URL'),
+            'host' => env('SUPABASE_DB_HOST', 'db.supabase.co'),
+            'port' => env('SUPABASE_DB_PORT', '5432'),
+            'database' => env('SUPABASE_DB_DATABASE', 'postgres'),
+            'username' => env('SUPABASE_DB_USERNAME', 'postgres'),
+            'password' => env('SUPABASE_DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('SUPABASE_DB_SSLMODE', 'prefer'),
+        ],
+
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),

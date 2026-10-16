@@ -1,116 +1,161 @@
-# Setup Supabase — Kasir Skanilan 2
+# Setup Supabase - Kasir Skanilan 2
 
-Dokumen ini mencatat langkah setup Supabase, temuan saat pengerjaan, dan
-masalah yang masih perlu ditangani.
+Dokumen ini adalah prosedur setup Supabase. Yang paling penting: **hampir
+semua langkah bisa dicek dengan satu perintah** di akhir.
 
-## Status saat ini
+```bash
+php artisan supabase:check
+```
 
-| Item | Status |
+Kalau perintahnya keluar dengan kode 0, setup sudah benar. Kalau tidak, outputnya
+menyebutkan apa yang salah dan cara memperbaikinya.
+
+## Alur singkat
+
+```bash
+# 1. Buat project di Supabase dengan region yang benar (tidak bisa diubah
+#    sesudahnya). Lalu salin URI dari:
+#    Dashboard > Database > Connection > tab "Session Pooler"
+
+# 2. Tulis konfigurasi koneksi ke .env
+php artisan supabase:configure --uri="postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+
+# 3. Salin kunci API dari Dashboard > Project Settings > API ke .env
+#    (SUPABASE_ANON_KEY, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY,
+#     SUPABASE_SECRET_KEY)
+
+# 4. Periksa
+php artisan supabase:check
+
+# 5. Buat tabelnya dari migration
+php artisan migrate --database=supabase --force
+
+# 6. Realtime + bucket + RLS
+#    Jalankan isi database/supabase/schema.sql di SQL Editor
+
+# 7. Periksa lagi
+php artisan supabase:check
+```
+
+## Kenapa `database/supabase/schema.sql` tidak dipakai untuk tabel
+
+Awalnya proyek punya file DDL manual berisi seluruh tabel. File itu **ternyata
+out of sync** dengan migration Laravel:
+
+| Yang salah di schema.sql | Akibatnya |
 |---|---|
-| Project `kasir-skanilan2` dibuat | ✅ |
-| 9 tabel awal dibuat | ✅ |
-| Realtime aktif (5 tabel di publication `supabase_realtime`) | ✅ |
-| Storage bucket `firmware` (private) | ✅ |
-| Kredensial API di `.env` | ✅ (anon + publishable + secret terverifikasi) |
-| Koneksi PostgreSQL dari mesin dev | ⚠️ **belum berhasil** — lihat [Masalah Koneksi](#masalah-koneksi) |
-| 11 tabel aplikasi (`transaction_items`, `settings`, `sessions`, `cache`, `cache_locks`, `personal_access_tokens`) | ⏳ belum dibuat |
+| Tidak ada `transaction_items`, `settings`, `sessions`, `cache`, `cache_locks`, `personal_access_tokens` | Aplikasi gagal total, karena butuh 15 tabel |
+| `transactions` kehilangan `receipt_no`, `tap_idempotency_key`, `expires_at`, `synced_at` | Nomor struk dan idempotensi tap tidak berfungsi |
+| `console_credentials` kehilangan `api_key`, `rotated_at` | Rotasi credential konsol tidak berfungsi |
+| `audit_logs` kehilangan `actor_id`, `ip_address` | Jejak audit tidak lengkap |
+| `menu_items.stock` default `0`, aplikasi memakai `-1` | Stok tak terbatas jadi salah baca |
 
-> ⚠️ **Penting:** yang tersimpan di Supabase saat ini baru **9 tabel**, sedangkan
-> aplikasi butuh **11 tabel**. Enam tabel berikut belum ada:
->
-> | Tabel | Dipakai oleh |
-> |---|---|
-> | `transaction_items` | rincian item transaksi (Ticket 08) |
-> | `settings` | pengaturan aplikasi (Ticket 12) |
-> | `sessions` | `SESSION_DRIVER=database` |
-> | `cache`, `cache_locks` | `CACHE_STORE=database` |
-> | `personal_access_tokens` | autentikasi Sanctum untuk Cashier Web UI |
->
-> Tanpa itu, aplikasi akan gagal saat dipakai di Supabase.
-
-## Kenapa `database/supabase/schema.sql` tidak dipakai lagi
-
-Awalnya proyek punya file `database/supabase/schema.sql` berisi DDL manual.
-File itu **ternyapi out of sync** dengan migration Laravel:
-
-- Tidak punya `transaction_items`, `settings`, `sessions`, `cache`,
-  `cache_locks`, `personal_access_tokens`
-- `transactions` kehilangan kolom `receipt_no`, `tap_idempotency_key`,
-  `expires_at`, `synced_at`
-- `console_credentials` kehilangan `api_key`, `rotated_at`
-- `audit_logs` kehilangan `actor_id`, `ip_address`
-- `menu_items.stock` default `0` padahal aplikasi memakai `-1` sebagai unlimited
-
-Menambal manual akan menghasilkan drift lagi di ticket berikutnya.
+Menambal manual seperti itu akan menghasilkan drift lagi di ticket berikutnya.
 
 **Keputusan: sumber kebenaran tunggal adalah `php artisan migrate`.**
-`database/supabase/schema.sql` sekarang hanya berisi bagian yang **tidak**
-bisa dibuat migration, yaitu:
+`database/supabase/schema.sql` sekarang hanya berisi bagian yang tidak bisa
+dibuat migration:
 
 - pendaftaran tabel ke publication `supabase_realtime`
 - pembuatan storage bucket `firmware`
 - kebijakan RLS
 
-## Cara menerapkan schema
+`php artisan supabase:check` juga membaca daftar tabel yang diharapkan dari
+file migration, sehingga tabel baru di ticket berikutnya otomatis ikut dicek.
 
-### Langkah 1 — Reset schema publik
+## Memilih region
 
-Jalankan di **Supabase Dashboard → SQL Editor**:
+Region **tidak bisa diubah** setelah project dibuat. Kalau salah pilih, satu-satunya
+jalan adalah membuat project baru.
+
+Untuk pengguna di Indonesia, urutannya:
+
+| Region | Kota | Catatan |
+|---|---|---|
+| `ap-southeast-1` | Singapore | Paling dekat, latency paling rendah |
+| `ap-southeast-2` | Sydney | |
+| `ap-northeast-1` | Tokyo | |
+| `ap-east-1` | Hong Kong | |
+| `ap-south-1` | Mumbai | |
+
+Nama host connection pooler mengikuti region, jadi region salah akan membuat
+`tenant/user not found`:
+
+```
+aws-0-ap-southeast-1.pooler.supabase.com
+aws-0-ap-southeast-2.pooler.supabase.com
+aws-0-ap-northeast-1.pooler.supabase.com
+...
+```
+
+Cara paling akurat: **Dashboard > Database > Connection > tab "Session Pooler"**,
+lalu salin URI-nya. String itu sudah memuat host, port, dan username yang benar
+untuk region project kamu.
+
+## Kenapa harus lewat connection pooler
+
+Host direct `db.<ref>.supabase.co` **hanya punya AAAA record (IPv6)**. Di jaringan
+tanpa IPv6, host itu tidak bisa di-resolve sama sekali dan error-nya
+`could not translate host name` - yang tidak menyiratkan IPv6 sebagai penyebabnya.
+
+Connection pooler punya endpoint IPv4, jadi bisa dipakai dari mana saja:
+
+| Port | Mode | Cocok untuk |
+|---|---|---|
+| 5432 | session pooler | aplikasi yang lama hidup, `migrate`, `DB::transaction()` |
+| 6543 | transaction pooler | serverless yang koneksi singkat |
+
+Proyek ini memakai session pooler (5432) karena `RfidTapService` memakai
+`lockForUpdate()` di dalam transaksi.
+
+## Dua jebakan `.env` yang pernah menggigit
+
+### 1. Password berawalan `#`
+
+```dotenv
+DB_PASSWORD=#rahasia          # SALAH: dibaca sebagai komentar, jadi kosong
+DB_PASSWORD="#rahasia"        # BENAR
+```
+
+Tidak ada error yang muncul; autentikasi hanya gagal belakangan dengan pesan yang
+tidak menjelaskan penyebabnya. `php artisan supabase:configure` sudah otomatis
+mengapit nilai yang perlu tanda kutip.
+
+### 2. Kunci API terpotong atau tertukar
+
+Kunci JWT panjang dan mudah salah ketik. Gejalanya `Invalid API key` padahal
+project-nya sehat. `supabase:check` membaca claim `ref` di dalam JWT dan
+membandingkannya dengan project ref dari URL, jadi kunci dari project lain
+terdeteksi sebelum dites ke server.
+
+Dua format kunci yang dipakai Supabase:
+
+| Format | Awalan | Untuk |
+|---|---|---|
+| lama (JWT) | `eyJ...` | ada claim `role`: `anon` atau `service_role` |
+| baru | `sb_publishable_` / `sb_secret_` | publishable untuk browser, secret untuk server |
+
+`sb_secret_` adalah pengganti `service_role`. Keduanya bisa diisi.
+
+## Koneksi `supabase` terpisah
+
+Konfigurasi database Supabase disimpan di blok `SUPABASE_DB_*`, bukan `DB_*`.
+Aplikasi lokal tetap memakai SQLite, dan beralih ke Supabase cukup dengan:
+
+```dotenv
+DB_CONNECTION=supabase
+```
+
+Konsekuensinya, `php artisan supabase:check` bisa memeriksa Supabase tanpa
+mengubah koneksi yang dipakai aplikasi - berguna karena jaringan mesin dev
+kadang tidak bisa menjangkau Supabase sama sekali.
+
+## Verifikasi manual
+
+Kalau lebih suka cek langsung lewat SQL Editor:
 
 ```sql
-DROP SCHEMA public CASCADE;
-CREATE SCHEMA public;
-GRANT ALL ON SCHEMA public TO postgres;
-GRANT ALL ON SCHEMA public TO anon;
-GRANT ALL ON SCHEMA public TO authenticated;
-```
-
-> ⚠️ Menghapus semua data di schema `public`. Aman karena isinya baru dibuat
-> hari ini dan belum dipakai.
-
-### Langkah 2 — Jalankan migration Laravel
-
-```bash
-php artisan migrate --force
-```
-
-Laravel akan membuat ke-15 tabel beserta foreign key dan index-nya, persis
-sama dengan yang dipakai di development SQLite.
-
-### Langkah 3 — Realtime + bucket + RLS
-
-Jalankan isi `database/supabase/schema.sql` (hanya bagian 5 dan 6).
-
-### Langkah 4 — Seed data awal
-
-Minimal perlu satu admin:
-
-```sql
-INSERT INTO users (id, name, email, password, role, balance_cents, created_at, updated_at)
-VALUES (
-  gen_random_uuid(),
-  'Admin Kasir',
-  'admin@kasir.local',
-  '$2y$12$...',            -- hash dari `php artisan tinker` => Hash::make('password123')
-  'admin',
-  0,
-  now(), now()
-);
-```
-
-Untuk hash-nya:
-
-```bash
-php artisan tinker --execute="echo Hash::make('password123');"
-```
-
-Atau lebih mudah, jalankan seeder lewat aplikasi setelah migration:
-`php artisan db:seed --class=AdminUserSeeder`.
-
-## Verifikasi
-
-```sql
--- 1. Semua tabel aplikasi harus ada (harus 15)
+-- 1. Tabel aplikasi, harus 15
 SELECT count(*) AS tabel FROM information_schema.tables
 WHERE table_schema = 'public'
   AND table_name IN (
@@ -120,85 +165,23 @@ WHERE table_schema = 'public'
     'personal_access_tokens'
   );
 
--- 2. Realtime (harus 5)
+-- 2. Realtime
 SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
 
--- 3. Bucket (harus 1 baris, public = false)
-SELECT id, name, public FROM storage.buckets WHERE id = 'firmware';
+-- 3. Bucket harus private
+SELECT id, public FROM storage.buckets WHERE id = 'firmware';
 
 -- 4. Kolom yang sempat hilang di schema.sql
 SELECT column_name FROM information_schema.columns
 WHERE table_name = 'console_credentials' AND column_name IN ('api_key','rotated_at');
 ```
 
-## Beralih ke Supabase di aplikasi
-
-Edit `.env`:
-
-```dotenv
-DB_CONNECTION=pgsql
-DB_HOST=<dari Dashboard → Database → Connection → URI>
-DB_PORT=5432
-DB_DATABASE=postgres
-DB_USERNAME=postgres.<project-ref>
-
-# WAJIB diapit tanda kutip kalau password diawali "#"
-DB_PASSWORD="..."
-
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-```
-
-Lalu:
-
-```bash
-php artisan config:clear
-php artisan migrate
-php artisan serve
-```
-
-## Masalah Koneksi
-
-Pengembangan lokal memakai SQLite. Percobaan menghubungkan langsung ke
-PostgreSQL Supabase gagal dengan dua masalah berbeda:
-
-### 1. Host database tidak punya IPv4
-
-```
-db.<project-ref>.supabase.co  →  hanya AAAA record (IPv6)
-```
-
-Kalau jaringan tidak mendukung IPv6, host itu tidak bisa dijangkau. Solusinya
-memakai **Connection Pooler (Supavisor)**:
-
-```
-aws-0-<region>.pooler.supabase.com     port 5432 (session)
-aws-0-<region>.pooler.supabase.com     port 6543 (transaction)
-username: postgres.<project-ref>
-```
-
-### 2. Pooler menolak koneksi
-
-```
-FATAL: (ENOTFOUND) tenant/user postgres.<project-ref> not found
-```
-
-Artinya prefix region pada hostname pooler tidak cocok dengan region project.
-`aws-0-ap-southeast-1.pooler.supabase.com` dijangkau (TCP connect berhasil),
-tetapi tenant tidak ditemukan — kemungkinan besar project dibuat di region
-selain `ap-southeast-1`.
-
-**Cara memastikan:** Dashboard → **Database → Connection** → salin URI dari
-tab **Session Pooler**. String itu sudah memuat host, port, dan username yang
-benar.
-
 ## Catatan operasional
 
 | Topik | Keterangan |
 |---|---|
-| `SESSION_DRIVER` | Wajib `database`. Supabase tidak punya filesystem persisten, session di file akan hilang tiap deploy. |
-| `CACHE_STORE` | Wajib `database`. Sama alasannya. |
-| Password diawali `#` | Wajib `"..."` di `.env`, kalau tidak nilainya terbaca kosong. |
-| CA certificate | PHP lokal butuh `curl.cainfo` untuk akses HTTPS ke Supabase. |
-| API key baru | Supabase sekarang memakai `sb_publishable_` dan `sb_secret_`. Keduanya valid; `sb_secret_` menggantikan `service_role`. |
+| `SESSION_DRIVER` | Wajib `database`. Supabase tidak punya filesystem persisten; session di file hilang tiap deploy. |
+| `CACHE_STORE` | Wajib `database`, alasan sama. |
+| CA certificate | PHP lokal butuh `curl.cainfo` untuk HTTPS ke Supabase. |
+| Bucket `firmware` | Wajib private. Firmware hanya lewat signed URL berumur pendek. |
+| Reset password | Mengganti password database di Dashboard langsung membatalkan nilai di `.env`, jadi `.env` harus diperbarui. |
