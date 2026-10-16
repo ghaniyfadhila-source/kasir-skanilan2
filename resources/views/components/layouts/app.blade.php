@@ -1,4 +1,12 @@
 @props(['realtime' => null])
+{{--
+    Halaman admin selalu memakai Realtime (Ticket 09), jadi kalau view tidak
+    mengirimkannya, layout menyediakannya sendiri.
+
+    `clientConfig()` tanpa device id cukup untuk admin: yang dibutuhkan hanya
+    channel dashboard. Channel kasir tidak pernah dibuka dari sisi admin.
+--}}
+@php($realtime ??= \App\Services\Realtime\RealtimeTopic::clientConfig())
 <!DOCTYPE html>
 <html lang="id" x-data="{ sidebarOpen: false }">
 <head>
