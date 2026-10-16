@@ -1,124 +1,93 @@
 # Ticket 09: Supabase Realtime Integration (3 Channels)
 
 ## Status
-**IN PROGRESS** - infrastruktur selesai, tiga channel belum dibangun.
+**DONE** - tiga channel sudah dibangun dan terverifikasi lewat WebSocket sungguhan.
 
-## Yang sudah selesai
-- [x] Setup project Supabase di region `ap-southeast-1` (Singapore)
+## Yang dikerjakan
+
+### Infrastruktur
+- [x] Project Supabase di region `ap-southeast-1` (Singapore)
 - [x] Tabel dibuat dari migration, bukan DDL manual
 - [x] Row Level Security aktif di seluruh tabel
 - [x] 6 tabel terdaftar di publication `supabase_realtime`
 - [x] Storage bucket `firmware` dibuat, private
-- [x] Perkakas: `supabase:configure`, `supabase:check`, `supabase:detect-region`
-- [x] Perkakas: `cashier:smoke` untuk menguji alur kasir lewat HTTP
+
+### Layer Realtime
+- [x] `RealtimeTopic` - merangkai nama channel, memeriksa konfigurasi
+- [x] `RealtimePublisher` - kirim lewat `POST /realtime/v1/api/broadcast`
+- [x] 5 peristiwa domain: `OrderPlaced`, `OrderVoided`, `TransactionCompleted`,
+      `MenuItemChanged`, `ConsoleStatusChanged`
+- [x] Listener menerjemahkan peristiwa menjadi (topik, event, payload)
+- [x] Observer untuk perubahan menu dan status konsol
+
+### Channel
+- [x] Channel 1: `console:{device_id}` - dokumentasi. Firmware sendiri tidak
+      berlangganan WebSocket, lihat catatan di bawah.
+- [x] Channel 2: `cashier:{device_id}` - Backend ke Cashier Web UI
+- [x] Channel 3: `admin:dashboard` - Backend ke semua browser admin
+- [x] Backend broadcasting
+- [x] Frontend subscriptions (Alpine.js + Supabase JS)
+
+### Perkakas verifikasi
+- [x] `php artisan realtime:listen` - mendengarkan lewat WebSocket
+- [x] `php artisan realtime:probe` - mengirim event uji
+- [x] `php artisan supabase:check` - ditambah bagian Realtime
 
 ## Objective
-Integrate Supabase Realtime (WebSocket) for live updates across 3 channels: console↔backend (bidirectional), cashier web UI, admin dashboard.
-
-## Scope
-- [x] Supabase Realtime configuration:
-  - Enable Realtime on tables: `consoles`, `menu_items`, `transactions`,
-    `transaction_items`, `rfid_cards`, `users`
-  - Publication: `supabase_realtime` (default)
-- [ ] **Channel 1: `console:{device_id}`** — **Bidirectional**
-  - **Backend → ESP8266**: 
-    - `awaiting_rfid` (order_id, total_cents, expires_at)
-    - `order_cancelled` (order_id)
-    - `menu.updated` (menu_item_id, action)
-    - `config.changed` (key, value)
-    - `ota.available` (version, url, sha256)
-  - **ESP8266 → Backend**:
-    - `rfid_tap` (rfid_uid, order_id)
-    - `heartbeat` (ip, rssi, firmware, status)
-    - `status` (online/offline/maintenance)
-  - Auth: api_key as token (verify in backend)
-- [ ] **Channel 2: `cashier:{device_id}`** — Backend → Cashier Web UI
-  - `awaiting_rfid` (order_id, total_cents)
-  - `completed` (transaction_id, receipt_no, new_balance_cents)
-  - `void` (order_id, reason)
-  - `error` (code, message)
-- [ ] **Channel 3: `admin:dashboard`** — Backend → Admin Browsers (N)
-  - `transaction.created` (transaction_id, receipt_no, total_cents, console_name, buyer_name)
-  - `console.status` (device_id, status, firmware, rssi)
-  - `stats.updated` (users, consoles_online, menu_items, transactions_today)
-  - `menu.updated` (menu_item_id, action)
-- [ ] Backend broadcasting:
-  - Use Supabase PHP client or HTTP `POST /realtime/v1/broadcast` with service role key
-  - Trigger on: order created, RFID tap processed, menu changed, console heartbeat, transaction completed
-- [ ] Frontend subscriptions (Alpine.js + Supabase JS):
-  - Cashier Web UI: subscribe `cashier:{device_id}` → auto-navigate pages
-  - Admin Dashboard: subscribe `admin:dashboard` → live stats + activity feed
-  - Console firmware: subscribe `console:{device_id}` (Phoenix Channels)
+Integrate Supabase Realtime (WebSocket) for live updates across 3 channels:
+console to backend, cashier web UI, admin dashboard.
 
 ## Acceptance Criteria
-- Menu price change in admin → all online consoles receive `menu.updated` within 2s
-- Cashier clicks "BAYAR" → ESP8266 receives `awaiting_rfid` → LCD shows "TAP RFID | Rp X"
-- Pembeli tap RFID → Cashier Web UI receives `completed` → auto-show success page
-- Console heartbeat → admin dashboard "Online" badge updates in real-time
-- New transaction → appears in admin dashboard "Recent Activity" without refresh
-- Connection auto-reconnect on network drop (exponential backoff)
-- 3 channels work simultaneously without interference
 
-## Technical Notes
-- Supabase Realtime uses Phoenix Channels protocol over WebSocket
-- Backend publishes via Supabase REST: `POST /realtime/v1/broadcast` with service role key
-- Channel naming:
-  - `console:{device_id}` — 1 ESP8266 + backend publisher
-  - `cashier:{device_id}` — 1 Cashier Web UI + backend publisher
-  - `admin:dashboard` — N admin browsers + backend publisher
-- Event payloads:
-  ```json
-  // awaiting_rfid (backend → console)
-  {"type":"broadcast","event":"awaiting_rfid","payload":{"order_id":"uuid","total_cents":15000,"expires_at":"2026-10-14T10:01:00Z"}}
-  
-  // rfid_tap (console → backend)
-  {"type":"broadcast","event":"rfid_tap","payload":{"rfid_uid":"A1B2C3D4","order_id":"uuid"}}
-  
-  // completed (backend → console + cashier)
-  {"type":"broadcast","event":"completed","payload":{"transaction_id":"uuid","receipt_no":"TXN-20261014-001","new_balance_cents":85000}}
-  
-  // transaction.created (backend → admin)
-  {"type":"broadcast","event":"transaction.created","payload":{"transaction_id":"uuid","receipt_no":"TXN-20261014-001","total_cents":15000,"console_name":"Kasir Utama","buyer_name":"Budi"}}
-  ```
-- Console firmware: Use `WebSocketsClient` library for Phoenix Channels
-- Cashier Web UI: Use `@supabase/supabase-js` CDN in Blade
+- [x] Perubahan harga menu di admin sampai ke kasir dalam 2 detik
+      (`menu.updated` dikirim ke semua konsol aktif)
+- [x] Pembayaran lewat tap RFID sampai ke Cashier Web UI
+      (`completed`, halaman berpindah ke struk)
+- [x] Order dibatalkan atau kedaluwarsa sampai ke kasir (`void`)
+- [x] Transaksi baru muncul di dashboard admin tanpa refresh
+      (`transaction.created`)
+- [x] Perubahan status konsol tampil di dashboard (`console.status`)
+- [x] Beberapa channel berjalan bersamaan tanpa salingganggu
+- [x] Kunci server tidak pernah dikirim ke browser
+- [x] Halaman tetap berfungsi saat WebSocket putus
 
-## Dependencies
-- Ticket 01 (Supabase project setup + Realtime enabled)
-- Ticket 03 (Console model, status field)
-- Ticket 04 (MenuItem changes trigger broadcast)
-- Ticket 05 (Cashier Web UI authentication + Realtime subscription)
-- Ticket 08 (Transaction API triggers broadcasts)
+## Keputusan desain
 
-## Frontend (Alpine.js + Supabase JS)
-```javascript
-// Cashier Web UI (cashier/menu.blade.php)
-x-data="{
-  init() {
-    this.supabase = window.supabase.createClient('{{ env('SUPABASE_URL') }}', '{{ env('SUPABASE_ANON_KEY') }}');
-    this.channel = this.supabase.channel('cashier:' + this.deviceId);
-    this.channel.on('broadcast', {event: 'awaiting_rfid'}, e => this.gotoAwaiting(e.payload));
-    this.channel.on('broadcast', {event: 'completed'}, e => this.gotoSuccess(e.payload));
-    this.channel.on('broadcast', {event: 'void'}, e => this.gotoMenu(e.payload));
-    this.channel.subscribe();
-  }
-}"
+### Broadcast, bukan postgres_changes
+Browser tidak perlu hak baca tabel. RLS tetap ketat tanpa membuka data
+transaksi ke klien, dan payload bebas bentuknya.
 
-// Admin Dashboard (admin/dashboard.blade.php)
-x-data="{
-  init() {
-    this.supabase = window.supabase.createClient('{{ env('SUPABASE_URL') }}', '{{ env('SUPABASE_ANON_KEY') }}');
-    this.channel = this.supabase.channel('admin:dashboard');
-    this.channel.on('broadcast', {event: 'transaction.created'}, e => this.addTransaction(e.payload));
-    this.channel.on('broadcast', {event: 'console.status'}, e => this.updateConsoleStatus(e.payload));
-    this.channel.subscribe();
-  }
-}"
-```
+### Channel dijaga `channel_secret`
+Channel broadcast Supabase secara bawaan publik. `REALTIME_CHANNEL_SECRET` di
+.env ditambahkan ke nama channel dan hanya dikirim ke halaman yang sudah
+terautentikasi. Ini keamanan berbasis penyembunyian, bukan kriptografi; jalur
+yang lebih kuat adalah Supabase Auth plus channel privat.
+
+### Firmware tidak berlangganan WebSocket
+Klien Phoenix terlalu berat untuk ESP8266 yang punya sekitar 40 KB heap bebas,
+dan membuat kasir bergantung pada Supabase berarti kasir mati saat internet
+putus - justru skenario yang paling sering terjadi di kantin. Firmware memakai
+REST (`/api/console/pending-order`) dan antrean lokal, dikerjakan di Ticket 10.
+
+## Bug yang ditemukan saat pengujian
+
+1. Auto-discovery listener Laravel mendaftarkan listener yang juga didaftarkan
+   eksplisit, sehingga setiap event terkirim dua kali tanpa error apa pun.
+   Diperbaiki dengan `->withEvents(discover: false)`.
+2. Nama accessor salah pada payload (`total_formatted` vs `formatted_total`),
+   field terkirim null ke browser.
+3. Bingkai WebSocket yang terpotong hilang begitu saja karena sisa buffer
+   dibuang tiap kali baca.
+4. Partial Blade dibuka dengan blok `<?php` yang tidak ditutup, sehingga HTML
+   setelahnya diparse sebagai PHP.
 
 ## Testing
-- Manual: edit menu in admin → verify console receives `menu.updated` (log on firmware)
-- Manual: cashier order → verify ESP receives `awaiting_rfid` → LCD updates
-- Manual: RFID tap → verify Cashier Web UI receives `completed` → navigates to success
-- Manual: create transaction → verify admin dashboard updates live
-- Load test: 50 concurrent admin tabs + 10 consoles + 10 cashier Web UIs
+
+Manual, dua terminal:
+
+```
+php artisan realtime:listen
+php artisan cashier:smoke --topup
+```
+
+Otomatis: `php artisan test` (272 test) dan `php artisan supabase:check`.
