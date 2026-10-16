@@ -208,8 +208,68 @@ class SupabaseCheck extends Command
         $this->pass('Koneksi', 'terbuka'.($serverVersion !== '' ? " (server {$serverVersion})" : ''));
 
         $this->checkTables();
+        $this->checkRowLevelSecurity();
         $this->checkRealtime();
         $this->checkBucket();
+    }
+
+    /**
+     * Pastikan RLS aktif di seluruh tabel aplikasi.
+     *
+     * Ini bukan pemeriksaan Formalitas. Supabase memberi role `anon` hak SELECT
+     * di semua tabel schema `public`, dan kunci itu ikut terpasang di browser
+     * Cashier Web UI. Tanpa RLS, siapa pun yang membuka DevTools bisa membaca
+     * `users` (password hash) dan `console_credentials` (`api_key`).
+     *
+     * Gejalanya saat RLS mati: PostgREST tetap membalas `200 []`, jadi tidak
+     * terlihat dari respons. Yang diperiksa adalah flag `relrowsecurity`.
+     */
+    private function checkRowLevelSecurity(): void
+    {
+        $this->section('Row Level Security');
+
+        if (DB::connection('supabase')->getDriverName() !== 'pgsql') {
+            $this->note('Lewati', 'hanya relevan untuk PostgreSQL');
+
+            return;
+        }
+
+        $rows = DB::connection('supabase')->select(
+            "select c.relname as table_name, c.relrowsecurity as rls
+               from pg_class c
+               join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public' and c.relkind = 'r'"
+        );
+
+        $unprotected = [];
+
+        foreach ($rows as $row) {
+            $row = (array) $row;
+
+            if (! $row['rls']) {
+                $unprotected[] = $row['table_name'];
+            }
+        }
+
+        if ($unprotected === []) {
+            $this->pass('RLS', 'aktif di '.count($rows).' tabel');
+
+            return;
+        }
+
+        // Tabel internal Laravel hanya berisi nama migration, jadi tidak
+        // berbahaya, tapi tetap tidak perlu terbuka ke publik.
+        $sensitive = array_values(array_diff($unprotected, ['migrations']));
+
+        if ($sensitive === []) {
+            $this->note('RLS', 'naktif pada: '.implode(', ', $unprotected).' (tabel internal Laravel)');
+
+            return;
+        }
+
+        $this->bad('RLS nonaktif ('.count($sensitive).')', implode(', ', $sensitive));
+        $this->problems[] = count($sensitive).' tabel tanpa RLS; kunci anon bisa membacanya langsung.';
+        $this->line('    <fg=gray>Perbaiki dengan:</> <fg=cyan>php artisan migrate --database=supabase --force</>');
     }
 
     private function reportConnectionFailure(Throwable $e, string $host, string $username, string $ref): void
@@ -273,11 +333,7 @@ class SupabaseCheck extends Command
         $this->section('Tabel');
 
         $expected = $this->expectedTables();
-
-        // `getTableListing()` dipakai supaya perintahnya tidak perlu tahu driver:
-        // PostgreSQL membaca dari `information_schema`, SQLite dari sqlite_master.
-        // Untuk PostgreSQL, `search_path` di config sudah diset ke `public`.
-        $existing = DB::connection('supabase')->getSchemaBuilder()->getTableListing();
+        $existing = $this->existingTables();
 
         $missing = array_values(array_diff($expected, $existing));
         $extra = array_values(array_diff($existing, $expected));
@@ -314,7 +370,7 @@ class SupabaseCheck extends Command
         $tables = array_column(array_map(fn ($r) => (array) $r, $rows), 'tablename');
 
         // Realtime hanya berguna untuk tabel yang berubah karena aksi kasir.
-        $wanted = ['transactions', 'transaction_items', 'menu_items', 'consoles', 'rfid_cards'];
+        $wanted = ['consoles', 'menu_items', 'transactions', 'transaction_items', 'rfid_cards', 'users'];
         $missing = array_values(array_diff($wanted, $tables));
 
         $this->pass('Tabel di publication', $tables === [] ? '(kosong)' : count($tables).' tabel');
@@ -390,6 +446,35 @@ class SupabaseCheck extends Command
     }
 
     /**
+     * Tabel yang benar-benar ada di schema tempat aplikasi bekerja.
+     *
+     * Di PostgreSQL, `getTableListing()` milik Laravel ikut Listing seluruh
+     * schema, sehingga tabel internal Supabase (`auth.identities`,
+     * `storage.buckets`, `vector.*`) ikut terbawa dan dilaporkan sebagai
+     * "tabel di luar daftar migration". Karena itu PostgreSQL diambil langsung
+     * dari information_schema dengan filter schema `public`.
+     *
+     * @return string[]
+     */
+    private function existingTables(): array
+    {
+        $connection = DB::connection('supabase');
+
+        if ($connection->getDriverName() !== 'pgsql') {
+            return $connection->getSchemaBuilder()->getTableListing();
+        }
+
+        $rows = $connection->select(
+            "select table_name from information_schema.tables where table_schema = 'public'"
+        );
+
+        return array_values(array_unique(array_map(
+            static fn ($r): string => (string) ((array) $r)['table_name'],
+            $rows
+        )));
+    }
+
+    /**
      * Daftar tabel yang harus ada, dibaca dari nama file migration.
      *
      * Mengambil dari migration, bukan daftar manual, supaya tabel baru yang
@@ -403,8 +488,14 @@ class SupabaseCheck extends Command
         $tables = [];
 
         foreach (glob(database_path('migrations/*.php')) ?: [] as $file) {
-            if (preg_match($pattern, (string) file_get_contents($file), $m) === 1) {
-                $tables[$m['table']] = true;
+            // `preg_match_all`, bukan `preg_match`: satu file migration bisa
+            // membuat lebih dari satu tabel. `create_cache_table.php` membuat
+            // `cache` sekaligus `cache_locks`, dan `preg_match` hanya akan
+            // menemukan yang pertama sehingga `cache_locks` lolos dari pemeriksaan.
+            preg_match_all($pattern, (string) file_get_contents($file), $matches);
+
+            foreach ($matches['table'] ?? [] as $table) {
+                $tables[$table] = true;
             }
         }
 

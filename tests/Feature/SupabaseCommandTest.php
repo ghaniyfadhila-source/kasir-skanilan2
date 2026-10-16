@@ -167,7 +167,7 @@ class SupabaseCommandTest extends TestCase
         // koneksi uji bukan PostgreSQL.
         $this->artisan('supabase:check')
             ->doesntExpectOutputToContain('Tabel belum dibuat')
-            ->expectsOutputToContain('Tabel aplikasi')
+            ->expectsOutputToContain('lengkap')
             ->assertExitCode(0);
     }
 
@@ -281,6 +281,10 @@ class SupabaseCommandTest extends TestCase
     /**
      * Daftar tabel yang harusnya terdeteksi perintah `supabase:check`.
      *
+     * `preg_match_all`, bukan `preg_match`: `create_cache_table.php` membuat dua
+     * tabel sekaligus. Kalau hanya yang pertama diambil, `cache_locks` tidak
+     * pernah dibuat di sini dan perintah akan - rightly - melaporkannya hilang.
+     *
      * @return string[]
      */
     private function migrationTables(): array
@@ -289,8 +293,10 @@ class SupabaseCommandTest extends TestCase
         $tables = [];
 
         foreach (glob(database_path('migrations/*.php')) ?: [] as $file) {
-            if (preg_match($pattern, (string) file_get_contents($file), $m) === 1) {
-                $tables[$m['table']] = true;
+            preg_match_all($pattern, (string) file_get_contents($file), $matches);
+
+            foreach ($matches['table'] ?? [] as $table) {
+                $tables[$table] = true;
             }
         }
 
