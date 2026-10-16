@@ -1,11 +1,24 @@
 # Ticket 09: Supabase Realtime Integration (3 Channels)
 
+## Status
+**IN PROGRESS** - infrastruktur selesai, tiga channel belum dibangun.
+
+## Yang sudah selesai
+- [x] Setup project Supabase di region `ap-southeast-1` (Singapore)
+- [x] Tabel dibuat dari migration, bukan DDL manual
+- [x] Row Level Security aktif di seluruh tabel
+- [x] 6 tabel terdaftar di publication `supabase_realtime`
+- [x] Storage bucket `firmware` dibuat, private
+- [x] Perkakas: `supabase:configure`, `supabase:check`, `supabase:detect-region`
+- [x] Perkakas: `cashier:smoke` untuk menguji alur kasir lewat HTTP
+
 ## Objective
 Integrate Supabase Realtime (WebSocket) for live updates across 3 channels: console↔backend (bidirectional), cashier web UI, admin dashboard.
 
 ## Scope
-- [ ] Supabase Realtime configuration:
-  - Enable Realtime on tables: `consoles`, `menu_items`, `transactions`
+- [x] Supabase Realtime configuration:
+  - Enable Realtime on tables: `consoles`, `menu_items`, `transactions`,
+    `transaction_items`, `rfid_cards`, `users`
   - Publication: `supabase_realtime` (default)
 - [ ] **Channel 1: `console:{device_id}`** — **Bidirectional**
   - **Backend → ESP8266**: 
