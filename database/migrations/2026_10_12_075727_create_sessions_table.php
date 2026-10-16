@@ -13,7 +13,13 @@ return new class extends Migration
     {
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
+
+            // UUID, bukan foreignId(). Semua model aplikasi memakai primary key
+            // UUID, dan Laravel menulis id user ke kolom ini setiap kali login.
+            // Kolom bigint akan menolak UUID itu di PostgreSQL dengan
+            // "invalid input syntax for type bigint". SQLite tidak menegakkan
+            // tipe kolom, jadi bug ini hanya muncul di PostgreSQL.
+            $table->foreignUuid('user_id')->nullable()->index();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
             $table->longText('payload');

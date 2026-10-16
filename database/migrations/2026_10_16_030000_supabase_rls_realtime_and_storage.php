@@ -38,6 +38,19 @@ return new class extends Migration
     ];
 
     /**
+     * Tabel antrean. Bukan milik domain aplikasi, tapi tetap butuh RLS: Supabase
+     * memberi hak SELECT default ke `anon` untuk setiap tabel baru di schema
+     * `public`, dan payload job bisa memuat apa saja yang pernah di-dispatch.
+     *
+     * @var string[]
+     */
+    private const QUEUE_TABLES = [
+        'jobs',
+        'job_batches',
+        'failed_jobs',
+    ];
+
+    /**
      * Tabel yang didengarkan lewat Realtime.
      *
      * @var string[]
@@ -101,7 +114,7 @@ return new class extends Migration
      */
     private function enableRowLevelSecurity(): void
     {
-        foreach (self::APP_TABLES as $table) {
+        foreach ([...self::APP_TABLES, ...self::QUEUE_TABLES] as $table) {
             if (! Schema::hasTable($table)) {
                 continue;
             }

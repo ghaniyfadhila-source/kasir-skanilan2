@@ -208,6 +208,7 @@ class SupabaseCheck extends Command
         $this->pass('Koneksi', 'terbuka'.($serverVersion !== '' ? " (server {$serverVersion})" : ''));
 
         $this->checkTables();
+        $this->checkIdColumnTypes();
         $this->checkRowLevelSecurity();
         $this->checkRealtime();
         $this->checkBucket();
@@ -443,6 +444,86 @@ class SupabaseCheck extends Command
         $unique = array_values(array_unique($parts));
 
         return implode(' | ', array_map(static fn (string $p): string => mb_substr($p, 0, 140), $unique));
+    }
+
+    /**
+     * Tabel yang boleh tetap memakai kolom id bertipe integer.
+     *
+     * Kolom ini milik Laravel dan Sanctum sendiri, bukan tempat id model
+     * aplikasi disimpan, sehingga isinya memang angka.
+     *
+     * @var array<string, string[]>
+     */
+    private const INTEGER_ID_ALLOWED = [
+        'jobs' => ['id'],
+        'job_batches' => [],
+        'failed_jobs' => ['id'],
+        'personal_access_tokens' => ['id'],
+
+        // Nomor urut migration. Isinya memang angka, bukan id model.
+        'migrations' => ['id'],
+    ];
+
+    /**
+     * Pastikan kolom yang memegang id model aplikasi bertipe UUID.
+     *
+     * SQLite tidak menegakkan tipe kolom, jadi kolom bigint yang sebenarnya
+     * menampung UUID lolos tanpa error selama pengembangan lokal. Gejalanya baru
+     * muncul di PostgreSQL dan bentuknya tidak enak: saat login, Laravel menulis
+     * id user ke `sessions.user_id` dan PostgreSQL menolak dengan
+     * `invalid input syntax for type bigint`.
+     */
+    private function checkIdColumnTypes(): void
+    {
+        $this->section('Tipe kolom id');
+
+        if (DB::connection('supabase')->getDriverName() !== 'pgsql') {
+            $this->note('Lewati', 'hanya relevan untuk PostgreSQL');
+
+            return;
+        }
+
+        $rows = DB::connection('supabase')->select(
+            // format_type() mengembalikan nama SQL standar ('bigint'), sedangkan
+            // regtype untuk OID yang sama menghasilkan 'int8'. Perbandingan
+            // harus memakai nama yang muncul di sini.
+            "select c.relname as table_name, a.attname as column_name,
+                    format_type(a.atttypid, a.atttypmod) as data_type
+               from pg_attribute a
+               join pg_class c on c.oid = a.attrelid
+               join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public'
+                and c.relkind = 'r'
+                and a.attnum > 0
+                and not a.attisdropped
+                and format_type(a.atttypid, a.atttypmod) in ('smallint', 'integer', 'bigint')
+                and (a.attname = 'id' or a.attname like '%\_id')
+              order by c.relname, a.attname"
+        );
+
+        $mismatched = [];
+
+        foreach ($rows as $row) {
+            $row = (array) $row;
+
+            if (in_array($row['column_name'], self::INTEGER_ID_ALLOWED[$row['table_name']] ?? [], true)) {
+                continue;
+            }
+
+            $mismatched[] = "{$row['table_name']}.{$row['column_name']}";
+        }
+
+        if ($mismatched === []) {
+            $this->pass('Kolom id', 'semua bertipe UUID');
+
+            return;
+        }
+
+        $this->bad('Kolom id bertipe integer ('.count($mismatched).')', implode(', ', $mismatched));
+        $this->problems[] = count($mismatched).' kolom id bertipe integer padahal modelnya memakai UUID.';
+        $this->line('    <fg=gray>Kolom seperti ini menolak UUID di PostgreSQL, tapi lolos di SQLite.</>');
+        $this->line('    <fg=gray>Perbaiki migration-nya, lalu bangun ulang skema:</>');
+        $this->line('    <fg=cyan>php artisan migrate:fresh --database=supabase --seed --force</>');
     }
 
     /**

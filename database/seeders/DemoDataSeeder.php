@@ -32,17 +32,18 @@ class DemoDataSeeder extends Seeder
         $makanan = Category::firstOrCreate(['name' => 'Makanan'], ['sort_order' => 1]);
         $minuman = Category::firstOrCreate(['name' => 'Minuman'], ['sort_order' => 2]);
 
+        // Harga ditulis dalam SEN, bukan rupiah: Rp 15.000 = 1500000.
         MenuItem::firstOrCreate(
             ['name' => 'Nasi Goreng'],
-            ['category_id' => $makanan->id, 'price_cents' => 15000, 'stock' => -1, 'is_active' => true]
+            ['category_id' => $makanan->id, 'price_cents' => 1500000, 'stock' => -1, 'is_active' => true]
         );
         MenuItem::firstOrCreate(
             ['name' => 'Ayam Bakar'],
-            ['category_id' => $makanan->id, 'price_cents' => 18000, 'stock' => 20, 'is_active' => true]
+            ['category_id' => $makanan->id, 'price_cents' => 1800000, 'stock' => 20, 'is_active' => true]
         );
         MenuItem::firstOrCreate(
             ['name' => 'Es Teh Manis'],
-            ['category_id' => $minuman->id, 'price_cents' => 5000, 'stock' => -1, 'is_active' => true]
+            ['category_id' => $minuman->id, 'price_cents' => 500000, 'stock' => -1, 'is_active' => true]
         );
 
         $student = User::firstOrCreate(

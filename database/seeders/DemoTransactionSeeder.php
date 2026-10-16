@@ -25,20 +25,27 @@ class DemoTransactionSeeder extends Seeder
         $console = Console::first();
         $category = Category::firstOrCreate(['name' => 'Makanan'], ['sort_order' => 1]);
 
-        $items = collect(['Nasi Goreng' => 15000, 'Ayam Bakar' => 18000, 'Es Teh Manis' => 5000])
-            ->map(fn ($price, $name) => MenuItem::firstOrCreate(
-                ['name' => $name],
-                ['category_id' => $category->id, 'price_cents' => $price, 'stock' => -1, 'is_active' => true]
-            ));
+        // Harga dalam SEN, sama dengan yang dipakai DemoDataSeeder.
+        $items = collect([
+            'Nasi Goreng' => 1500000,
+            'Ayam Bakar' => 1800000,
+            'Es Teh Manis' => 500000,
+        ])->map(fn ($price, $name) => MenuItem::firstOrCreate(
+            ['name' => $name],
+            ['category_id' => $category->id, 'price_cents' => $price, 'stock' => -1, 'is_active' => true]
+        ));
 
         $cashier = User::firstOrCreate(
             ['email' => 'rina@kantin.sch.id'],
             ['name' => 'Rina Kasir', 'password' => 'kasir12345', 'role' => 'cashier', 'device_id' => $console->device_id]
         );
 
+        // Saldo awal Rp 500.000 per siswa. Seeder ini membuat belasan transaksi
+        // per orang, jadi saldo awal yang kecil akan habis dan membuat halaman
+        // Laporan menampilkan saldo negatif yang tidak masuk akal.
         $buyers = collect(range(1, 5))->map(fn ($i) => User::firstOrCreate(
             ['email' => "murid{$i}@kantin.sch.id"],
-            ['name' => "Siswa Contoh {$i}", 'password' => 'password123', 'role' => 'student', 'balance_cents' => 5000000]
+            ['name' => "Siswa Contoh {$i}", 'password' => 'password123', 'role' => 'student', 'balance_cents' => 50000000]
         ));
 
         // 14 hari terakhir, transaksi acak supaya grafik terlihat berisi.
@@ -79,6 +86,14 @@ class DemoTransactionSeeder extends Seeder
                         'quantity' => $line['qty'],
                         'unit_price_cents' => $line['item']->price_cents,
                     ]);
+                }
+
+                // Kalau saldo kurang, simulate top-up seperti yang terjadi di kantin.
+                // Tanpa ini saldo bisa minus kalau ada siswa yang kebetulan
+                // bertransaksi lebih sering, dan laporan menampilkan angka
+                // negatif yang tidak masuk akal.
+                if ($buyer->balance_cents < $total) {
+                    $buyer->increment('balance_cents', 20000000 - $buyer->balance_cents);
                 }
 
                 $buyer->decrement('balance_cents', $total);

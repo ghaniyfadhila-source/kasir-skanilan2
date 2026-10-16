@@ -12,8 +12,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('personal_access_tokens', function (Blueprint $table) {
+            // Kolom id dan tokenable_id tetap auto-increment integer: ini kolom
+            // milik Sanctum sendiri, bukan kolom yang memegang id model aplikasi.
             $table->id();
-            $table->morphs('tokenable');
+
+            // uuidMorphs, bukan morphs(). Semua model aplikasi memakai primary
+            // key UUID; morphs() membuat tokenable_id bertipe bigint sehingga
+            // pembuatan token Sanctum akan gagal di PostgreSQL.
+            $table->uuidMorphs('tokenable');
             $table->text('name');
             $table->string('token', 64)->unique();
             $table->text('abilities')->nullable();

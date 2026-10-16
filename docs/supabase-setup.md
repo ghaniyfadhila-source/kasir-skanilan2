@@ -33,15 +33,76 @@ php artisan supabase:configure --url=https://<ref>.supabase.co --region=ap-south
 # 5. Periksa
 php artisan supabase:check
 
-# 6. Buat tabelnya dari migration
-php artisan migrate --database=supabase --force
+# 6. Isi data awal
+php artisan db:seed --database=supabase --force
 
-# 7. Realtime + bucket + RLS
-#    Jalankan isi database/supabase/schema.sql di SQL Editor
+# 7. Beralih ke Supabase di aplikasi (ubah di .env)
+#    DB_CONNECTION=supabase
+#    lalu: php artisan config:clear
 
-# 8. Periksa lagi
+# 8. Pastikan aplikasinya benar-benar bisa dipakai
+php artisan serve --port=8010
+php artisan cashier:smoke --topup
+
+# 9. Periksa lagi
 php artisan supabase:check
 ```
+
+## Beralih ke Supabase
+
+Koneksi `supabase` terpisah dari koneksi utama, jadi keduanya bisa hidup
+berdampingan:
+
+| `.env` | Dipakai untuk |
+|---|---|
+| `DB_CONNECTION=sqlite` | pengembangan lokal, cepat, tanpa jaringan |
+| `DB_CONNECTION=supabase` | instalasi sungguhan, database di Supabase |
+
+Setelah `php artisan config:clear`, perintah berikut membaca blok
+`SUPABASE_DB_*` dan otomatis ikut memakai Supabase.
+
+## Dua verifikasi yang wajib dijalankan
+
+`php artisan supabase:check` memeriksa konfigurasi dan keamanan. Tapi ada dua
+kelemahan yang tidak bisa menangkapnya:
+
+### Tipe kolom id
+
+SQLite **tidak menegakkan tipe kolom**. Kolom `bigint` yang sebenarnya menampung
+UUID lolos tanpa error selama pengembangan lokal, lalu meledak di PostgreSQL:
+
+```
+SQLSTATE[22P02]: invalid input syntax for type bigint: "a2ff254c-660e-4485-af4a-1fb22f5e31f9"
+```
+
+Gejalanya muncul saat login, karena Laravel menulis id user ke
+`sessions.user_id`. Semua model aplikasi memakai primary key UUID, jadi setiap
+kolom yang menyimpan id harus UUID.
+
+`supabase:check` punya bagian **Tipe kolom id** yang membandingkan tipe kolom di
+PostgreSQL dengan konvensi UUID. Bagian ini pernah menemukan dua bug sekaligus:
+`sessions.user_id` dan `personal_access_tokens.tokenable_id`.
+
+### Alur kasir menyeluruh
+
+Halaman login yang terbuka tidak berarti aplikasinya bisa dipakai. Yang penting
+adalah satu alur penuh:
+
+```
+kasir login -> pilih menu -> buat order -> ESP8266 melihat order
+-> pembeli tap kartu -> transaksi selesai -> saldo berkurang -> kasir melihat struk
+```
+
+```bash
+php artisan serve --port=8010     # di terminal terpisah
+php artisan cashier:smoke --topup
+```
+
+Perintah ini melewati semuanya lewat HTTP, jadi juga menguji RLS, tipe kolom,
+dan konfigurasi rute yang tidak disentuh test suite.
+
+Opsi `--topup` menambah saldo pembeli lebih dulu supaya perintah bisa dijalankan
+berulang-ulang; tanpa opsi itu, saldo akan habis setelah beberapa kali jalan.
 
 ## Mendeteksi region otomatis
 
