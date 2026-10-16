@@ -149,12 +149,14 @@ class SupabaseCheck extends Command
     private function probeKey(string $url, string $key): int|string
     {
         try {
-            // Selalu query ke endpoint tabel, bukan root `/rest/v1/`: root hanya
-            // menerima service_role sehingga kunci valid akan terlihat ditolak.
+            // Uji ke `/auth/v1/health`, bukan ke endpoint tabel. Endpoint health
+            // selalu ada dan tidak bergantung pada skema, sedangkan endpoint
+            // tabel menjawab 404 selama migration belum dijalankan. Menguji ke
+            // tabel membuat "kunci tidak valid" tercampur dengan "tabel belum ada".
             $response = Http::withHeaders([
                 'apikey' => $key,
                 'Authorization' => 'Bearer '.$key,
-            ])->timeout(15)->get($url.'/rest/v1/menu_items?select=id&limit=1');
+            ])->timeout(15)->get($url.'/auth/v1/health');
         } catch (ConnectionException $e) {
             $this->error('Tidak bisa menghubungi API Supabase: '.$e->getMessage());
             $this->problems[] = 'Koneksi HTTPS ke Supabase gagal.';

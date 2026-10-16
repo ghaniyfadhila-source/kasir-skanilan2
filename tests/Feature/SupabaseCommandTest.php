@@ -54,11 +54,53 @@ class SupabaseCommandTest extends TestCase
             'SUPABASE_ANON_KEY' => 'sb_publishable_abc',
         ]);
 
-        Http::fake(['*/rest/v1/*' => Http::response([], 200)]);
+        Http::fake(['*/auth/v1/health' => Http::response(['status' => 'ok'], 200)]);
 
         $this->artisan('supabase:check --skip-db')
             ->expectsOutputToContain('diterima (publishable)')
             ->assertExitCode(0);
+    }
+
+    /**
+     * Regresi: kunci diuji lewat endpoint tabel, yang menjawab 404 selama
+     * migration belum dijalankan. Kunci yang sebenarnya valid lalu dilaporkan
+     * sebagai "respons tidak terduga". Karena itu sekarang diuji ke
+     * /auth/v1/health yang selalu ada dan tidak bergantung pada skema.
+     */
+    public function test_a_valid_key_is_accepted_even_when_tables_do_not_exist_yet(): void
+    {
+        $this->writeEnv([
+            'SUPABASE_URL' => 'https://abcdefghijklmnopqrst.supabase.co',
+            'SUPABASE_ANON_KEY' => 'sb_publishable_abc',
+        ]);
+
+        // Tabel masih kosong: PostgREST menjawab 404 dengan kode PGRST205.
+        Http::fake([
+            '*/auth/v1/health' => Http::response(['status' => 'ok'], 200),
+            '*/rest/v1/*' => Http::response([
+                'code' => 'PGRST205',
+                'message' => "Could not find the table 'public.menu_items'",
+            ], 404),
+        ]);
+
+        $this->artisan('supabase:check --skip-db')
+            ->expectsOutputToContain('diterima (publishable)')
+            ->doesntExpectOutputToContain('respons tidak terduga')
+            ->assertExitCode(0);
+    }
+
+    public function test_an_invalid_key_is_reported_as_rejected(): void
+    {
+        $this->writeEnv([
+            'SUPABASE_URL' => 'https://abcdefghijklmnopqrst.supabase.co',
+            'SUPABASE_ANON_KEY' => 'sb_publishable_abc',
+        ]);
+
+        Http::fake(['*/auth/v1/health' => Http::response(['message' => 'Invalid API key'], 401)]);
+
+        $this->artisan('supabase:check --skip-db')
+            ->expectsOutputToContain('ditolak, HTTP 401')
+            ->assertExitCode(1);
     }
 
     /**
@@ -89,7 +131,7 @@ class SupabaseCommandTest extends TestCase
             'SUPABASE_DB_PASSWORD' => 'sandi',
         ]);
 
-        Http::fake(['*/rest/v1/*' => Http::response([], 200)]);
+        Http::fake(['*/auth/v1/health' => Http::response(['status' => 'ok'], 200)]);
 
         // Hanya sebagian tabel yang dibuat; sisanya harus dilaporkan hilang.
         $this->createTable('users');
@@ -114,7 +156,7 @@ class SupabaseCommandTest extends TestCase
             'SUPABASE_DB_PASSWORD' => 'sandi',
         ]);
 
-        Http::fake(['*/rest/v1/*' => Http::response([], 200)]);
+        Http::fake(['*/auth/v1/health' => Http::response(['status' => 'ok'], 200)]);
 
         foreach ($this->migrationTables() as $table) {
             $this->createTable($table);
