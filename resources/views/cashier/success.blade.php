@@ -1,4 +1,4 @@
-<x-layouts.cashier :title="'Transaksi Berhasil - Kasir Skanilan'">
+<x-layouts.cashier :realtime="$realtime ?? null" :title="'Transaksi Berhasil - Kasir Skanilan'">
     <div x-data="successApp()" x-init="init()">
         <div class="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-b from-green-50 to-white">
             <!-- Success Animation -->

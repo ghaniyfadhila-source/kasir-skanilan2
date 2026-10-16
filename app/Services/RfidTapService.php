@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\TransactionCompleted;
 use App\Models\AuditLog;
 use App\Models\MenuItem;
 use App\Models\RfidCard;
@@ -153,6 +154,10 @@ class RfidTapService
                     'balance_after_cents' => $balanceAfter,
                 ],
             ]);
+
+            // Di luar transaksi DB: pemanggilan HTTP ke Supabase tidak boleh
+            // menahan lock baris transaksi lebih lama dari yang perlu.
+            TransactionCompleted::dispatch($order->fresh(['buyer', 'console']));
 
             return $this->result(
                 self::OUTCOME_COMPLETED,

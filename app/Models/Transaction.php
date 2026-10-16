@@ -200,7 +200,7 @@ class Transaction extends Model
     public function formattedTotal(): Attribute
     {
         return Attribute::make(
-            get: fn () => 'Rp '.number_format($this->total_cents / 100, 0, ',', '.'),
+            get: fn (): string => \App\Support\Rupiah::format($this->total_cents),
         );
     }
 }

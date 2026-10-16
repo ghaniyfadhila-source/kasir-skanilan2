@@ -123,16 +123,27 @@ Route::prefix('cashier')->name('cashier.')->group(function () {
     });
 
     Route::middleware(['auth:sanctum', 'cashier'])->group(function () {
-        Route::get('/menu', function () {
-            return view('cashier.menu');
+        // Ticket 09: konfigurasi Realtime ikut dikirim ke halaman kasir.
+        // Hanya perlu sekali; tiap halaman yang membutuhkannya tinggal
+        // memakai komponen Alpine `realtimeApp()`.
+        $withRealtime = function (string $view, array $data = []) {
+            $deviceId = auth()->user()?->device_id;
+
+            return view($view, $data + [
+                'realtime' => \App\Services\Realtime\RealtimeTopic::clientConfig($deviceId),
+            ]);
+        };
+
+        Route::get('/menu', function () use ($withRealtime) {
+            return $withRealtime('cashier.menu');
         })->name('menu');
 
-        Route::get('/awaiting/{orderId}', function (string $orderId) {
-            return view('cashier.awaiting', compact('orderId'));
+        Route::get('/awaiting/{orderId}', function (string $orderId) use ($withRealtime) {
+            return $withRealtime('cashier.awaiting', compact('orderId'));
         })->name('awaiting');
 
-        Route::get('/success/{orderId}', function (string $orderId) {
-            return view('cashier.success', compact('orderId'));
+        Route::get('/success/{orderId}', function (string $orderId) use ($withRealtime) {
+            return $withRealtime('cashier.success', compact('orderId'));
         })->name('success');
     });
 });

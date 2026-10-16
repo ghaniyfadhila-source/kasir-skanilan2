@@ -11,6 +11,15 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    // Auto-discovery listener dimatikan.
+    //
+    // Discovery Laravel mendaftarkan setiap method publik yang punya satu
+    // parameter, termasuk `handleCompleted`, `handleVoided`, dan `handlePlaced`.
+    // Itu sebenarnya bekerja, tapi listener di Ticket 09 juga didaftarkan secara
+    // eksplisit di AppServiceProvider supaya kita bisa melihat siapa mengikat
+    // apa. Kalau keduanya aktif, tiap event terkirim dua kali - dan tidak ada
+    // error apa pun yang menandainya.
+    ->withEvents(discover: false)
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,

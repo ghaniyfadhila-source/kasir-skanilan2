@@ -1,3 +1,4 @@
+@props(['realtime' => null])
 <!DOCTYPE html>
 <html lang="id" x-data="{ sidebarOpen: false }">
 <head>
@@ -19,6 +20,11 @@
         }
     </script>
     @stack('styles')
+    {{-- Ticket 09: Realtime hanya dimuat kalau ada konsol yang sedang login,
+         supaya halaman login kasir tidak mengunduh pustaka yang tidak dipakai. --}}
+    @if($realtime ?? false)
+        @include('partials.realtime-init', ['realtime' => $realtime])
+    @endif
 </head>
 <body class="bg-gray-50 min-h-screen font-sans">
     <!-- Toast Container -->

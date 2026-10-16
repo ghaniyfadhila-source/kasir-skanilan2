@@ -172,6 +172,6 @@ class ReportService
 
     public static function rupiah(?int $cents): string
     {
-        return 'Rp '.number_format(($cents ?? 0) / 100, 0, ',', '.');
+        return \App\Support\Rupiah::format($cents ?? 0);
     }
 }

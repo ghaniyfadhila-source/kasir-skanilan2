@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -117,6 +118,19 @@ class User extends Authenticatable
             'revoked_at' => now(),
         ]);
         return true;
+    }
+
+    /**
+ * Saldo dalam bentuk siap tampil.
+ *
+ * Dipakai oleh API konsol dan event Realtime supaya format rupiah hanya
+ * ditentukan di satu tempat.
+ */
+    public function formattedBalance(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): string => \App\Support\Rupiah::format($this->balance_cents),
+        );
     }
 
     /**

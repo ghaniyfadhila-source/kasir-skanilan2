@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\Cashier;
 
+use App\Events\OrderPlaced;
+use App\Events\OrderVoided;
 use App\Http\Controllers\Controller;
 use App\Models\MenuItem;
 use App\Models\Transaction;
+use App\Support\Rupiah;
 use App\Models\TransactionItem;
 use App\Models\Category;
 use Illuminate\Http\Request;
@@ -116,7 +119,7 @@ class OrderController extends Controller
                             'id' => $item->id,
                             'name' => $item->name,
                             'price_cents' => $item->price_cents,
-                            'price_formatted' => 'Rp ' . number_format($item->price_cents / 100, 0, ',', '.'),
+                            'price_formatted' => Rupiah::format($item->price_cents),
                             'stock' => $item->stock,
                             'is_unlimited' => $item->stock === -1,
                             'image_url' => $item->image_url ? asset('storage/' . $item->image_url) : null,
@@ -225,7 +228,9 @@ class OrderController extends Controller
             'items_count' => count($transactionItems),
         ]);
 
-        // Broadcast ke console via Realtime (akan diimplementasikan di Ticket 09)
+        // Ticket 09: kabari dashboard admin bahwa ada order baru yang menunggu tap.
+        OrderPlaced::dispatch($transaction);
+
         return $this->orderResponse($transaction);
     }
 
@@ -240,7 +245,7 @@ class OrderController extends Controller
             'data' => [
                 'order_id' => $transaction->id,
                 'total_cents' => $transaction->total_cents,
-                'total_formatted' => 'Rp ' . number_format($transaction->total_cents / 100, 0, ',', '.'),
+                'total_formatted' => Rupiah::format($transaction->total_cents),
                 'status' => $transaction->status,
                 'expires_at' => $transaction->expires_at?->toIso8601String(),
             ],
@@ -260,7 +265,7 @@ class OrderController extends Controller
         $data = [
             'order_id' => $transaction->id,
             'total_cents' => $transaction->total_cents,
-            'total_formatted' => 'Rp ' . number_format($transaction->total_cents / 100, 0, ',', '.'),
+            'total_formatted' => Rupiah::format($transaction->total_cents),
             'status' => $transaction->status,
             'expires_at' => $transaction->expires_at?->toIso8601String(),
             'items' => $transaction->transactionItems->map(fn ($i) => [
@@ -330,7 +335,9 @@ class OrderController extends Controller
             'cashier_id' => $cashier->id,
         ]);
 
-        // Broadcast order_cancelled ke console (Ticket 09)
+        // Ticket 09: kasir yang asal membatalkan harus diberi tahu supaya
+        // halamannya tidak menggantung sampai batas waktu habis.
+        OrderVoided::dispatch($transaction, 'dibatalkan kasir');
 
         return response()->json([
             'success' => true,

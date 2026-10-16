@@ -1,4 +1,4 @@
-<x-layouts.cashier :title="'Menunggu Tap RFID - Kasir Skanilan'">
+<x-layouts.cashier :realtime="$realtime ?? null" :title="'Menunggu Tap RFID - Kasir Skanilan'">
     <div x-data="awaitingApp()" x-init="init()">
         <div class="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-b from-blue-50 to-white">
             <!-- Header -->
@@ -100,6 +100,8 @@
                 statusType: 'info',
                 cancelLoading: false,
                 isOnline: navigator.onLine,
+                realtimeActive: false,
+                pollTimer: null,
 
                 init() {
                     // Get orderId from URL
@@ -155,7 +157,7 @@
                 },
 
                 async onTimeout() {
-                    clearInterval(this.timer);
+                    this.clearAllTimers();
                     this.statusMessage = 'Waktu habis - Pesanan dibatalkan';
                     this.statusType = 'error';
                     
@@ -195,11 +197,11 @@
                                 const status = data.data.status;
                                 
                                 if (status === 'completed') {
-                                    clearInterval(this.timer);
+                                    this.clearAllTimers();
                                     window.location.href = `{{ route('cashier.success', ':id') }}`.replace(':id', this.orderId);
                                     return;
                                 } else if (status === 'voided') {
-                                    clearInterval(this.timer);
+                                    this.clearAllTimers();
                                     this.statusMessage = 'Pesanan dibatalkan';
                                     this.statusType = 'error';
                                     setTimeout(() => {
@@ -219,9 +221,12 @@
                         }
                     };
 
-                    // Poll every 2 seconds
-                    setInterval(poll, 2000);
-                    // Initial poll
+                    // Poll setiap 2 detik sebagai cadangan Realtime.
+                    //
+                    // Poll berhenti sendiri setelah Realtime memberi tahu
+                    // statusnya, supaya tidak ada request sia-sia selama
+                    // koneksi WebSocket sehat.
+                    this.pollTimer = setInterval(poll, 2000);
                     poll();
                 },
 
@@ -239,7 +244,7 @@
                         const data = await response.json();
 
                         if (data.success) {
-                            clearInterval(this.timer);
+                            this.clearAllTimers();
                             this.statusMessage = 'Pesanan dibatalkan';
                             this.statusType = 'info';
                             setTimeout(() => {
@@ -256,9 +261,63 @@
                 },
 
                 initRealtime() {
-                    // Supabase Realtime subscription
-                    // Will be implemented when Supabase JS is available
-                    console.log('Realtime: would subscribe to cashier:' + localStorage.getItem('cashier_device_id'));
+                    // Ticket 09: bayar outras IGNOREd. Poll tetap jalan sebagai
+                    // cadangan - kalau WebSocket putus, halaman harus tetap
+                    // bisa tahu pembayaran berhasil.
+                    if (!window.KasirRealtime) return;
+
+                    const topic = @json($realtime['topics']['cashier'] ?? null);
+
+                    if (!topic) return;
+
+                    this.realtimeActive = true;
+
+                    window.KasirRealtime.subscribe(topic, {
+                        'completed': (payload) => {
+                            // Hanya order milik halaman ini; channel kasir juga
+                            // menerima order dari halaman kasir lain.
+                            if (payload.transaction_id !== this.orderId) return;
+
+                            this.clearAllTimers();
+                            this.statusMessage = 'Pembayaran berhasil';
+                            this.statusType = 'success';
+
+                            setTimeout(() => {
+                                window.location.href = @json(route('cashier.success', ':id')).replace(':id', payload.transaction_id);
+                            }, 900);
+                        },
+
+                        'void': (payload) => {
+                            if (payload.order_id !== this.orderId) return;
+
+                            this.clearAllTimers();
+                            this.statusMessage = payload.reason === 'kedaluwarsa'
+                                ? 'Waktu habis - Pesanan dibatalkan'
+                                : 'Pesanan dibatalkan';
+                            this.statusType = 'error';
+
+                            setTimeout(() => {
+                                window.location.href = @json(route('cashier.menu'));
+                            }, 2000);
+                        },
+                    });
+                },
+
+                /**
+                 * Matikan semua timer halaman ini.
+                 *
+                 * Tanpa ini, navigasi karena Realtime akan meninggalkan
+                 * interval countdown dan polling yang masih berjalan di
+                 * background, lalu mulai membuat request untuk order yang
+                 * sudah selesai.
+                 */
+                clearAllTimers() {
+                    if (this.timer) clearInterval(this.timer);
+                    if (this.pollTimer) clearInterval(this.pollTimer);
+
+                    this.timer = null;
+                    this.pollTimer = null;
+                    this.realtimeActive = true;
                 },
 
                 toast(message, type = 'success') {

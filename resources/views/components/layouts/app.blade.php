@@ -1,3 +1,4 @@
+@props(['realtime' => null])
 <!DOCTYPE html>
 <html lang="id" x-data="{ sidebarOpen: false }">
 <head>
@@ -18,6 +19,11 @@
             }
         }
     </script>
+{{-- Ticket 09: Realtime untuk dashboard admin (transaksi baru, status konsol).
+         Taruh di head supaya `KasirRealtime` sudah ada sebelum script halaman. --}}
+    @isset($realtime)
+        @include('partials.realtime-init', ['realtime' => $realtime])
+    @endisset
 </head>
 <body class="bg-gray-50 min-h-screen font-sans">
     <!-- Sidebar overlay for mobile -->

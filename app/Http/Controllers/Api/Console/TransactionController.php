@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Console;
 
+use App\Support\Rupiah;
 use App\Http\Controllers\Controller;
 use App\Models\RfidCard;
 use App\Models\Transaction;
@@ -69,7 +70,7 @@ class TransactionController extends Controller
                 'rfid_uid' => $card->rfid_uid,
                 'name' => $card->user->name,
                 'balance_cents' => $card->user->balance_cents,
-                'balance_formatted' => $this->rupiah($card->user->balance_cents),
+                'balance_formatted' => Rupiah::format($card->user->balance_cents),
             ],
         ]);
     }
@@ -183,7 +184,7 @@ class TransactionController extends Controller
                 'total_formatted' => $this->rupiah($transaction->total_cents),
                 'buyer_name' => $buyer?->name,
                 'new_balance_cents' => $buyer?->balance_cents,
-                'new_balance_formatted' => $this->rupiah($buyer?->balance_cents ?? 0),
+                'new_balance_formatted' => Rupiah::format($buyer?->balance_cents ?? 0),
                 'completed_at' => $transaction->completed_at?->toIso8601String(),
             ],
         ]);
@@ -200,6 +201,6 @@ class TransactionController extends Controller
 
     private function rupiah(?int $cents): string
     {
-        return 'Rp '.number_format(($cents ?? 0) / 100, 0, ',', '.');
+        return Rupiah::format($cents ?? 0);
     }
 }

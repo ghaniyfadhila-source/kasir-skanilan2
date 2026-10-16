@@ -1,4 +1,4 @@
-<x-layouts.cashier :title="'Menu Kasir - ' . (session('console_name') ?? 'Kantin')">
+<x-layouts.cashier :realtime="$realtime ?? null" :title="'Menu Kasir - ' . (session('console_name') ?? 'Kantin')">
     <div x-data="cashierApp()" x-init="init()">
         <!-- Header -->
         <header class="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">

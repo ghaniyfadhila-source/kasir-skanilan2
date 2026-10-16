@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Events\OrderVoided;
 use App\Models\AuditLog;
 use App\Models\Transaction;
 use Illuminate\Console\Command;
@@ -55,6 +56,10 @@ class VoidExpiredOrders extends Command
                         'error_code' => 'RFID_TIMEOUT',
                         'error_message' => 'Tidak ada tap RFID dalam batas waktu.',
                     ])->save();
+
+                    // Ticket 09: kasir yang sedang menunggu tap harus diberi
+                    // tahu seketika, bukan tetap menggantung sampai waktu habis.
+                    OrderVoided::dispatch($fresh, 'kedaluwarsa');
 
                     AuditLog::create([
                         'console_id' => $fresh->console_id,

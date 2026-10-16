@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Realtime\RealtimePublisher;
+use App\Services\Realtime\RealtimeTopic;
 use App\Services\SupabaseEnv;
 use Illuminate\Console\Command;
 use Illuminate\Http\Client\ConnectionException;
@@ -38,6 +40,16 @@ class SupabaseCheck extends Command
 
     /** @var string[] */
     private array $warnings = [];
+
+    /**
+ * Constructor ini menambah dependency, jadi constructor bawaan Laravel tetap
+ * dipanggil. Kalau tidak, `$signature` tidak pernah diproses dan Artisan
+ * melaporkan kelas ini "tidak terinisialisasi dengan benar".
+ */
+    public function __construct(private readonly RealtimePublisher $publisher)
+    {
+        parent::__construct();
+    }
 
     public function handle(SupabaseEnv $env): int
     {
@@ -208,6 +220,7 @@ class SupabaseCheck extends Command
         $this->pass('Koneksi', 'terbuka'.($serverVersion !== '' ? " (server {$serverVersion})" : ''));
 
         $this->checkTables();
+        $this->checkRealtimeConfiguration();
         $this->checkIdColumnTypes();
         $this->checkRowLevelSecurity();
         $this->checkRealtime();
@@ -444,6 +457,56 @@ class SupabaseCheck extends Command
         $unique = array_values(array_unique($parts));
 
         return implode(' | ', array_map(static fn (string $p): string => mb_substr($p, 0, 140), $unique));
+    }
+
+    /**
+     * Pastikan Realtime punya URL, kunci, dan rahasia channel.
+     *
+     * Tanpa `channel_secret`, nama channel seperti `admin:dashboard` bisa
+     * ditebak siapa saja yang punya kunci anon - dan kunci itu memang ikut
+     * terpasang di browser. Gejalanya tidak muncul di mana pun: semuanya
+     * "jalan normal", hanya saja siapa pun bisa berlangganan.
+     */
+    private function checkRealtimeConfiguration(): void
+    {
+        $this->section('Realtime');
+
+        $missing = RealtimeTopic::missingConfiguration();
+
+        if ($missing !== []) {
+            foreach ($missing as $item) {
+                $this->bad($item);
+            }
+
+            $this->problems[] = 'Realtime belum dikonfigurasi lengkap: '.implode('; ', $missing);
+            $this->line('    <fg=gray>Lengkapi dengan:</> <fg=cyan>php artisan supabase:configure</>');
+
+            return;
+        }
+
+        $secret = (string) config('realtime.channel_secret');
+
+        $this->pass('URL dan kunci', 'terisi');
+        $this->pass('channel_secret', strlen($secret).' karakter');
+
+        if (strlen($secret) < 32) {
+            $this->note('channel_secret', 'pendek; pakai 32 karakter atau lebih');
+            $this->warnings[] = 'REALTIME_CHANNEL_SECRET terlalu pendek untuk dipakai sebagai pembatas channel.';
+        }
+
+        // Uji sungguhan. Kalau publish ditolak, masalahnya bukan lagi
+        // konfigurasi lokal tapi kredensial atau jaringan.
+        $sent = $this->publisher->broadcast(
+            RealtimeTopic::adminDashboard(),
+            'supabase.check',
+            ['probe' => true]
+        );
+
+        $this->pass('Uji kirim', $sent ? 'diterima server (HTTP 202)' : 'DITOLAK server');
+
+        if (! $sent) {
+            $this->problems[] = 'Realtime terkonfigurasi tapi server menolak broadcast; cek kunci API dan jaringan.';
+        }
     }
 
     /**
