@@ -492,7 +492,7 @@ BOOT → WIFI_CONNECT → REGISTER_DEVICE → MAIN_LOOP
 | 04 | Menu Management (Category + Item + Drag-sort + Image) | `ticket-04-menu-crud` | ✅ Done (831cf75) |
 | 05 | **Cashier Web UI** (Order + Awaiting RFID + Realtime) | `ticket-05-cashier-webui` | ✅ Done (dc02f40) |
 | 06 | User Management + RFID Assign + Balance Top-up | `ticket-06-user-rfid` | ✅ Done (7b84923) |
-| 07 | ESP8266 Firmware (RFID tap + LCD + Realtime) | `ticket-07-firmware` | ⏳ Pending |
+| 07 | ESP8266 Firmware (RFID tap + LCD + Realtime) | `ticket-07-firmware` | ✅ Done (a696d57) |
 | 08 | Transaction API + Idempotency (Order + RFID tap) | `ticket-08-transaction-api` | ✅ Done |
 | 09 | Supabase Realtime Integration (3 channels) | `ticket-09-realtime` | ⏳ Pending |
 | 10 | Offline Queue + Auto-void (SPIFFS) | `ticket-10-offline-queue` | ⏳ Pending |
