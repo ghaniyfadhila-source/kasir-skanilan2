@@ -1,0 +1,18 @@
+# Build PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Kredensial perangkat — JANGAN pernah di-commit.
+# File ini berisi api_key hasil `php artisan console:credentials`.
+firmware/data/config.json
+data/config.json
+
+# Berkas Excel/CAD
+*.xls
+*.xlsx
+*.xlsb
+*.xlsm
+*.xls*
+*.dwg
+*.dxf

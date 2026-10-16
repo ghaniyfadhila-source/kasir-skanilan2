@@ -261,6 +261,71 @@ class ConsoleApiTest extends TestCase
     // POST /api/console/heartbeat
     // ------------------------------------------------------------------
 
+    // ------------------------------------------------------------------
+    // GET /api/console/pending-order
+    // ------------------------------------------------------------------
+
+    public function test_pending_order_is_empty_when_no_order_waiting(): void
+    {
+        $this->withHeaders($this->headers())
+            ->getJson('/api/console/pending-order')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data', null);
+    }
+
+    public function test_pending_order_returns_awaiting_order(): void
+    {
+        $order = $this->makeOrder(15000);
+
+        $this->withHeaders($this->headers())
+            ->getJson('/api/console/pending-order')
+            ->assertOk()
+            ->assertJsonPath('data.order_id', $order->id)
+            ->assertJsonPath('data.status', Transaction::STATUS_AWAITING_RFID)
+            ->assertJsonPath('data.total_cents', 15000);
+    }
+
+    public function test_pending_order_ignores_expired_and_other_consoles(): void
+    {
+        $expired = $this->makeOrder();
+        $expired->update(['expires_at' => now()->subSecond()]);
+
+        $otherConsole = Console::factory()->create(['is_active' => true]);
+        $otherOrder = Transaction::create([
+            'console_id' => $otherConsole->id,
+            'cashier_id' => $this->cashier->id,
+            'total_cents' => 99000,
+            'status' => Transaction::STATUS_AWAITING_RFID,
+            'expires_at' => now()->addMinute(),
+            'idempotency_key' => 'other-'.Str::uuid(),
+        ]);
+
+        $this->withHeaders($this->headers())
+            ->getJson('/api/console/pending-order')
+            ->assertOk()
+            ->assertJsonPath('data', null);
+    }
+
+    public function test_pending_order_returns_oldest_waiting_order(): void
+    {
+        $first = $this->makeOrder(15000);
+        $first->update(['created_at' => now()->subMinutes(2)]);
+
+        $second = $this->makeOrder(20000);
+        $second->update(['created_at' => now()]);
+
+        $this->withHeaders($this->headers())
+            ->getJson('/api/console/pending-order')
+            ->assertOk()
+            ->assertJsonPath('data.order_id', $first->id);
+    }
+
+    public function test_pending_order_requires_console_auth(): void
+    {
+        $this->getJson('/api/console/pending-order')->assertUnauthorized();
+    }
+
     public function test_heartbeat_updates_console_status(): void
     {
         $this->withHeaders($this->headers())

@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "author": "kasir-skanilan",
+  "editor": "vscode",
+  "boards": [],
+  "parts": [
+    {
+      "type": "wokwi-esp8266",
+      "id": "esp8266-node-mcu-v3",
+      "topLevelContainerId": "node-mcu-v3",
+      "pins": [
+        { "type": "D0", "id": "RC522_RST" },
+        { "type": "D1", "id": "BUZZER" },
+        { "type": "D2", "id": "LCD_SDA" },
+        { "type": "D3", "id": "LED_RED" },
+        { "type": "D4", "id": "LED_GREEN" },
+        { "type": "D5", "id": "RC522_SCK" },
+        { "type": "D6", "id": "RC522_MOSI" },
+        { "type": "D7", "id": "RC522_MISO" },
+        { "type": "D8", "id": "RC522_SS" },
+        { "type": "VCC", "id": "VCC" },
+        { "type": "GND", "id": "GND" }
+      ],
+      "pinLabels": {
+        "RC522_RST": "RST",
+        "BUZZER": "BUZZER",
+        "LCD_SDA": "SDA",
+        "LED_RED": "RED",
+        "LED_GREEN": "GREEN",
+        "RC522_SCK": "SCK",
+        "RC522_MOSI": "MOSI",
+        "RC522_MISO": "MISO",
+        "RC522_SS": "SS"
+      },
+      "attach": [
+        { "type": "wokwi-lcd1602", "id": "lcd", "dx": 0, "dy": -15 },
+        { "type": "wokwi-mfrc522", "id": "rfid", "dx": 80, "dy": 10 }
+      ]
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd",
+      "pins": [
+        { "type": "I2C_SDA", "id": "LCD_SDA" },
+        { "type": "I2C_SCL", "id": "D1" }
+      ],
+      "color": "black"
+    },
+    {
+      "type": "wokwi-mfrc522",
+      "id": "rfid",
+      "pins": [
+        { "type": "VCC", "id": "VCC" },
+        { "type": "GND", "id": "GND" },
+        { "type": "SDA", "id": "RC522_MISO" },
+        { "type": "MOSI", "id": "RC522_MOSI" },
+        { "type": "SCK", "id": "RC522_SCK" },
+        { "type": "SS", "id": "RC522_SS" },
+        { "type": "RST", "id": "RC522_RST" }
+      ]
+    }
+  ],
+  "dependencies": {}
+}

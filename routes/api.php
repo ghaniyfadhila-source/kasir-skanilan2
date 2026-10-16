@@ -23,6 +23,7 @@ Route::prefix('cashier')->group(function () {
 // Console (hardware) API Routes — X-Device-ID + X-API-Key
 Route::prefix('console')->middleware('console.auth')->group(function () {
     Route::post('/rfid-tap', [ConsoleTransactionController::class, 'rfidTap'])->name('console.rfid-tap');
+    Route::get('/pending-order', [ConsoleTransactionController::class, 'pendingOrder'])->name('console.pending-order');
     Route::get('/balance/{uid}', [ConsoleTransactionController::class, 'balance'])
         ->where('uid', '[0-9A-Fa-f]{8}')
         ->name('console.balance');

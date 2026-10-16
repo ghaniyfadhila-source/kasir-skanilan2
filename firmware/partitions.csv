@@ -1,0 +1,9 @@
+# Partisi untuk NodeMCU v3 (4MB flash, tanpa OTA)
+# 1MB LittleFS + 3MB aplikasi
+#
+# Dipakai environment `nodemcuv2`.
+#   Upload: pio run -e nodemcuv2 -t uploadfs
+nvs,      data, nvs,     0x9000,  0x5000,
+otstore,  data, fat,     0xe000,  0x1000,
+app0,     app,  factory, 0x10000, 0x300000,
+spiffs,   data, spiffs,  0x310000, 0xF0000,

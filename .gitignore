@@ -26,3 +26,7 @@ yarn-error.log
 /php.zip
 composer-setup.php
 composer.phar
+
+# Firmware ESP8266: build output & kredensial perangkat
+/firmware/.pio/
+/firmware/data/config.json

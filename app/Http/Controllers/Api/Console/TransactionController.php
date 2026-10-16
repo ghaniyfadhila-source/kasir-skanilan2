@@ -105,6 +105,46 @@ class TransactionController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/console/pending-order
+     *
+     * Memberi tahu perangkat kasir order mana yang sedang menunggu tap RFID.
+     *
+     * Kenapa perlu: notifikasi push lewat Realtime (channel console:{device_id})
+     * baru ada di Ticket 09. Tanpa Supabase project, perangkat tidak punya
+     * cara lain untuk tahu order aktif, sehingga LCD tidak bisa menampilkan
+     * "TAP RFID | Rp X". Endpoint ini menutup celah itu lewat polling REST.
+     */
+    public function pendingOrder(Request $request): JsonResponse
+    {
+        $console = $this->console($request);
+
+        $order = Transaction::query()
+            ->where('console_id', $console->id)
+            ->awaitingRfid()
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '>', now())
+            ->orderBy('created_at')
+            ->first();
+
+        if (! $order) {
+            return response()->json([
+                'success' => true,
+                'data' => null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'order_id' => $order->id,
+                'status' => $order->status,
+                'total_cents' => $order->total_cents,
+                'expires_at' => $order->expires_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
     // ------------------------------------------------------------------
 
     private function respond(array $result, string $deviceId): JsonResponse
