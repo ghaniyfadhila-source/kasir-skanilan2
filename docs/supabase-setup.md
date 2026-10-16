@@ -13,29 +13,70 @@ menyebutkan apa yang salah dan cara memperbaikinya.
 ## Alur singkat
 
 ```bash
-# 1. Buat project di Supabase dengan region yang benar (tidak bisa diubah
-#    sesudahnya). Lalu salin URI dari:
-#    Dashboard > Database > Connection > tab "Session Pooler"
+# 1. Buat project di Supabase dengan region yang benar (region tidak bisa diubah
+#    sesudahnya).
 
-# 2. Tulis konfigurasi koneksi ke .env
-php artisan supabase:configure --uri="postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+# 2. Pastikan region-nya benar. Perintah ini mendeteksi sendiri, tanpa perlu
+#    password database:
+php artisan supabase:detect-region
 
-# 3. Salin kunci API dari Dashboard > Project Settings > API ke .env
+# 3. Tulis konfigurasi koneksi ke .env
+php artisan supabase:configure --url=https://<ref>.supabase.co --region=ap-southeast-1 --password="<password>"
+
+#    Alternatif, kalau mau menempel URI dari Dashboard:
+#    php artisan supabase:configure --uri="postgresql://..."
+
+# 4. Salin kunci API dari Dashboard > Project Settings > API ke .env
 #    (SUPABASE_ANON_KEY, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY,
 #     SUPABASE_SECRET_KEY)
 
-# 4. Periksa
+# 5. Periksa
 php artisan supabase:check
 
-# 5. Buat tabelnya dari migration
+# 6. Buat tabelnya dari migration
 php artisan migrate --database=supabase --force
 
-# 6. Realtime + bucket + RLS
+# 7. Realtime + bucket + RLS
 #    Jalankan isi database/supabase/schema.sql di SQL Editor
 
-# 7. Periksa lagi
+# 8. Periksa lagi
 php artisan supabase:check
 ```
+
+## Mendeteksi region otomatis
+
+Region Supabase **tidak bisa diubah** setelah project dibuat, dan kesalahan region
+menghasilkan pesan yang sama sekali tidak membantu:
+
+```
+FATAL: (ENOTFOUND) tenant/user postgres.<ref> not found
+```
+
+Pesan itu tidak menyebut region sama sekali, padahal itu penyebabnya.
+
+`php artisan supabase:detect-region` memperjelasnya dengan memanfaatkan urutan
+pemeriksaan di connection pooler: pooler mengecek **tenant lebih dulu**, sebelum
+memvalidasi password. Jadi tanpa password yang benar pun, galatnya berbeda:
+
+| Galat | Arti |
+|---|---|
+| `tenant/user ... not found` | project ini tidak ada di region itu |
+| `password authentication failed` | **region benar**, hanya password-nya yang salah |
+
+Perintah mencoba seluruh region Supabase dan berhenti di yang cocok. Password yang
+dipakai sengaja ngawur dan tidak pernah berhasil masuk.
+
+Untuk pengguna di Indonesia, urutannya:
+
+| Region | Kota | Catatan |
+|---|---|---|
+| `ap-southeast-1` | Singapore | Paling dekat, latency paling rendah |
+| `ap-southeast-2` | Sydney | |
+| `ap-northeast-1` | Tokyo | |
+| `ap-east-1` | Hong Kong | |
+| `ap-south-1` | Mumbai | |
+
+Kalau region salah pilih, satu-satunya jalan adalah membuat project baru.
 
 ## Kenapa `database/supabase/schema.sql` tidak dipakai untuk tabel
 
@@ -63,28 +104,15 @@ dibuat migration:
 `php artisan supabase:check` juga membaca daftar tabel yang diharapkan dari
 file migration, sehingga tabel baru di ticket berikutnya otomatis ikut dicek.
 
-## Memilih region
+## Host pooler per region
 
-Region **tidak bisa diubah** setelah project dibuat. Kalau salah pilih, satu-satunya
-jalan adalah membuat project baru.
-
-Untuk pengguna di Indonesia, urutannya:
-
-| Region | Kota | Catatan |
-|---|---|---|
-| `ap-southeast-1` | Singapore | Paling dekat, latency paling rendah |
-| `ap-southeast-2` | Sydney | |
-| `ap-northeast-1` | Tokyo | |
-| `ap-east-1` | Hong Kong | |
-| `ap-south-1` | Mumbai | |
-
-Nama host connection pooler mengikuti region, jadi region salah akan membuat
+Nama host connection pooler mengikuti region, jadi region yang salah akan membuat
 `tenant/user not found`:
 
 ```
-aws-0-ap-southeast-1.pooler.supabase.com
-aws-0-ap-southeast-2.pooler.supabase.com
-aws-0-ap-northeast-1.pooler.supabase.com
+aws-0-ap-southeast-1.pooler.supabase.com   Singapore
+aws-0-ap-southeast-2.pooler.supabase.com   Sydney
+aws-0-ap-northeast-1.pooler.supabase.com  Tokyo
 ...
 ```
 

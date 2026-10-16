@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\SupabaseDetectRegion;
 use App\Services\SupabaseEnv;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -168,6 +169,34 @@ class SupabaseCommandTest extends TestCase
         $this->artisan('supabase:configure')
             ->expectsOutputToContain('Opsi `--uri` atau kombinasi')
             ->assertExitCode(1);
+    }
+
+    public function test_detect_region_reports_a_missing_project_url(): void
+    {
+        $this->artisan('supabase:detect-region --url=https://bukan.supabase.example')
+            ->expectsOutputToContain('Project URL tidak terbaca')
+            ->assertExitCode(1);
+    }
+
+    /**
+     * Klasifikasi galat adalah inti dari deteksi region: inilah yang membuat
+     * `tenant/user not found` bisa dibedakan dari `password authentication failed`.
+     */
+    public function test_it_classifies_pooler_errors(): void
+    {
+        $this->assertSame(
+            'not-this-region',
+            SupabaseDetectRegion::classify(
+                'SQLSTATE[08006] [7] connection failed: FATAL: (ENOTFOUND) tenant/user postgres.abc not found'
+            )
+        );
+
+        $this->assertSame(
+            'match',
+            SupabaseDetectRegion::classify('FATAL: password authentication failed for user "postgres.abc"')
+        );
+
+        $this->assertSame('unknown', SupabaseDetectRegion::classify('Connection refused'));
     }
 
     /**
