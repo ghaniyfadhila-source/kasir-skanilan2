@@ -343,12 +343,12 @@ BOOT → WIFI_CONNECT → REGISTER_DEVICE → MAIN_LOOP
 4. **Network** — Process HTTP queue, Realtime messages
 5. **Watchdog** — Feed ESP watchdog
 
-### 8.3 Offline Queue (SPIFFS)
+### 8.3 Offline Queue (LittleFS)
 - **Format:** JSON Lines per transaction
 - **Max size:** 500 KB (~2000 transactions)
-- **Fields:** idempotency_key, payload, created_at, retry_count
-- **Flush:** On WiFi reconnect, batch POST to `/api/console/transaction`
-- **Auto-void:** Transactions >5 min pending → mark voided locally, notify user
+- **Fields:** idempotency_key, rfid_uid, order_id, created_at, created_at_ms, boot_id, retry_count, status
+- **Flush:** On WiFi reconnect, batch POST to `/api/console/sync` (batas server 50, firmware 10 per request)
+- **Auto-void:** Tap >5 menit ditandai `voided` di LittleFS, lalu dilaporkan ke server dengan `status: "voided"` saat sync.
 
 ### 8.4 Device Registration Flow
 1. Boot → Read MAC → Generate device_id = `ESP-{MAC}`
@@ -495,7 +495,7 @@ BOOT → WIFI_CONNECT → REGISTER_DEVICE → MAIN_LOOP
 | 07 | ESP8266 Firmware (RFID tap + LCD + Realtime) | `ticket-07-firmware` | ✅ Done (a696d57) |
 | 08 | Transaction API + Idempotency (Order + RFID tap) | `ticket-08-transaction-api` | ✅ Done |
 | 09 | Supabase Realtime Integration (3 channels) | `ticket-09-realtime` | ✅ Done (4ab0ded) |
-| 10 | Offline Queue + Auto-void (SPIFFS) | `ticket-10-offline-queue` | ⏳ Pending |
+| 10 | Offline Queue + Auto-void (LittleFS) | `ticket-10-offline-queue` | Done (8727d0c) |
 | 11 | Reports + Export (Daily/Weekly/Monthly) | `ticket-11-reports` | ✅ Done (9c26840) |
 | 12 | Audit Logs + Admin Settings | `ticket-12-audit-settings` | ✅ Done (31727ce) |
 | 13 | Forgot Password (Admin Code) | `ticket-13-forgot-password` | ✅ Done (f901615) |
