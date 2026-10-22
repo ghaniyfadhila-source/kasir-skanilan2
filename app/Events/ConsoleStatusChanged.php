@@ -33,7 +33,9 @@ class ConsoleStatusChanged
             'device_id' => $this->console->device_id,
             'name' => $this->console->name,
             'status' => $this->console->status,
-            'last_seen_at' => $this->console->last_seen_at?->toIso8601String(),
+            // Nama kunci dipertahankan `last_seen_at` karena itu yang dibaca
+            // dashboard; sumbernya kolom `last_heartbeat_at`.
+            'last_seen_at' => $this->console->last_heartbeat_at?->toIso8601String(),
             'details' => $this->details,
         ];
     }

@@ -212,6 +212,24 @@ class RealtimeBroadcastTest extends TestCase
     }
 
     /**
+     * Regresi: observer dulu memantau kolom `last_seen_at` yang tidak ada,
+     * sehingga heartbeat perangkat tidak pernah tersiar ke dashboard.
+     * Payload juga memakai kolom yang sama, jadi `last_seen_at` selalu null.
+     */
+    public function test_heartbeat_update_is_broadcast_with_last_seen_at(): void
+    {
+        $console = $this->console();
+
+        $this->resetRecordedRequests();
+
+        $console->update(['last_heartbeat_at' => now()]);
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($r) => $this->messageTo($r)['event'] === 'console.status'
+            && $this->messageTo($r)['payload']['last_seen_at'] !== null);
+    }
+
+    /**
      * Regresi auto-discovery: dengan listener terdaftar dua kali, semua test
      * di atas tetap lulus karena hanya memeriksa "ada yang terkirim".
      */

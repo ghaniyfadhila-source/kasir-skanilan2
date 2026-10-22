@@ -127,27 +127,6 @@
                 </label>
             </div>
 
-            <div class="pt-4 border-t border-gray-200">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-medium text-gray-900">Rotasi Kredensial</h3>
-                </div>
-                <p class="text-sm text-gray-600 mb-4">
-                    Rotasi kredensial akan menghasilkan password dan API Key baru. Kredensial lama akan segera tidak valid.
-                    Gunakan jika kredensial terekspos atau untuk keamanan berkala.
-                </p>
-                <form method="POST" action="{{ route('admin.consoles.rotate-credentials', $console) }}" class="inline">
-                    @csrf
-                    <button type="submit"
-                            onclick="return confirm('Yakin ingin merotasi kredensial? Kredensial lama akan segera tidak valid dan console perlu dikonfigurasi ulang.')"
-                            class="px-4 py-2.5 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 transition-colors">
-                        <svg class="w-5 h-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        Rotasi Kredensial
-                    </button>
-                </form>
-            </div>
-
             <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <a href="{{ route('admin.consoles.index') }}"
                    class="px-4 py-2.5 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
@@ -159,6 +138,89 @@
                 </button>
             </div>
         </form>
+
+        <!-- Antrean Offline (Ticket 10) -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Antrean Offline</h3>
+                <span class="text-xs text-gray-500">
+                    {{ $console->queue_reported_at ? 'Dilaporkan ' . $console->queue_reported_at->diffForHumans() : 'Belum pernah dilaporkan' }}
+                </span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p class="text-sm text-yellow-800">Menunggu dikirim</p>
+                    <p class="mt-1 text-2xl font-bold text-yellow-900">{{ $console->queue_pending }}</p>
+                </div>
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p class="text-sm text-red-800">Gagal (perlu tindakan)</p>
+                    <p class="mt-1 text-2xl font-bold text-red-900">{{ $console->queue_failed }}</p>
+                </div>
+            </div>
+
+            <p class="text-sm text-gray-600 mb-4">
+                Tap RFID yang terjadi saat perangkat offline disimpan di LittleFS perangkat.
+                Perintah di bawah dieksekusi pada heartbeat berikutnya (maksimal 30 detik),
+                bukan seketika, karena perangkat tidak memakai koneksi WebSocket.
+            </p>
+
+            <form method="POST" action="{{ route('admin.consoles.queue.clear', $console) }}" class="inline"
+                  onsubmit="return confirm('Kosongkan antrean tap offline perangkat ini? Tap yang belum terkirim akan hilang dan tidak ditagihkan.')">
+                @csrf
+                <button type="submit"
+                        class="px-4 py-2.5 bg-gray-800 text-white font-medium rounded-lg hover:bg-gray-900 transition-colors">
+                    Kosongkan Antrean
+                </button>
+            </form>
+
+            @if ($commands->isNotEmpty())
+                <div class="mt-5 pt-4 border-t border-gray-200">
+                    <h4 class="text-sm font-medium text-gray-700 mb-2">Perintah Terakhir</h4>
+                    <ul class="space-y-2">
+                        @foreach ($commands as $command)
+                            <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                <span class="font-mono text-gray-900">{{ $command->command }}</span>
+                                @if ($command->acknowledged_at)
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                        {{ $command->result === 'ok' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                        {{ $command->result === 'ok' ? 'Selesai' : 'Gagal' }} {{ $command->acknowledged_at->diffForHumans() }}
+                                    </span>
+                                @elseif ($command->created_at->lt(now()->subMinutes(\App\Models\ConsoleCommand::TTL_MINUTES)))
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                        Kedaluwarsa
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                        Menunggu perangkat
+                                    </span>
+                                @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+        </div>
+
+        <!-- Rotasi Kredensial (form terpisah: <form> bersarang tidak sah di HTML) -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Rotasi Kredensial</h3>
+            <p class="text-sm text-gray-600 mb-4">
+                Rotasi kredensial akan menghasilkan password dan API Key baru. Kredensial lama akan segera tidak valid.
+                Gunakan jika kredensial terekspos atau untuk keamanan berkala.
+            </p>
+            <form method="POST" action="{{ route('admin.consoles.rotate-credentials', $console) }}" class="inline">
+                @csrf
+                <button type="submit"
+                        onclick="return confirm('Yakin ingin merotasi kredensial? Kredensial lama akan segera tidak valid dan console perlu dikonfigurasi ulang.')"
+                        class="px-4 py-2.5 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 transition-colors">
+                    <svg class="w-5 h-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Rotasi Kredensial
+                </button>
+            </form>
+        </div>
 
         <!-- Danger Zone -->
         <div class="bg-red-50 border border-red-200 rounded-xl p-6">

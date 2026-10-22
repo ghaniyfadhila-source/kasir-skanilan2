@@ -40,6 +40,9 @@ class Console extends Model
         'firmware_version',
         'ip_address',
         'wifi_rssi',
+        'queue_pending',
+        'queue_failed',
+        'queue_reported_at',
         'is_active',
     ];
 
@@ -47,6 +50,9 @@ class Console extends Model
     {
         return [
             'last_heartbeat_at' => 'datetime',
+            'queue_pending' => 'integer',
+            'queue_failed' => 'integer',
+            'queue_reported_at' => 'datetime',
             'is_active' => 'boolean',
         ];
     }
@@ -54,6 +60,11 @@ class Console extends Model
     public function credentials(): HasOne
     {
         return $this->hasOne(ConsoleCredential::class);
+    }
+
+    public function commands(): HasMany
+    {
+        return $this->hasMany(ConsoleCommand::class);
     }
 
     public function transactions(): HasMany

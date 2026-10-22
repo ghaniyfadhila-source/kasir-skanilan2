@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Console;
+use App\Models\ConsoleCommand;
 use App\Models\ConsoleCredential;
+use App\Services\ConsoleCommandService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -12,6 +14,10 @@ use Illuminate\Validation\Rule;
 
 class ConsoleController extends Controller
 {
+    public function __construct(private readonly ConsoleCommandService $commands)
+    {
+    }
+
     public function index(Request $request)
     {
         $query = Console::with('credentials')->latest();
@@ -92,7 +98,16 @@ class ConsoleController extends Controller
     public function edit(Console $console)
     {
         $console->load('credentials');
-        return view('admin.consoles.edit', compact('console'));
+
+        // Ticket 10: riwayat perintah terakhir supaya admin tahu apakah
+        // `queue.clear` sudah dijalankan perangkat atau masih menggantung.
+        $commands = ConsoleCommand::query()
+            ->where('console_id', $console->id)
+            ->latest()
+            ->limit(5)
+            ->get();
+
+        return view('admin.consoles.edit', compact('console', 'commands'));
     }
 
     public function update(Request $request, Console $console)
@@ -187,5 +202,26 @@ class ConsoleController extends Controller
                 'password' => $newPassword,
                 'api_key' => $newApiKey,
             ]);
+    }
+
+    /**
+     * Ticket 10: minta perangkat mengosongkan antrean tap offline-nya.
+     *
+     * Perangkat tidak berlangganan WebSocket, jadi perintah tidak dikirim
+     * seketika: ia disimpan dan diambil perangkat pada heartbeat berikutnya.
+     */
+    public function clearQueue(Console $console)
+    {
+        $command = $this->commands->dispatch($console, ConsoleCommand::COMMAND_QUEUE_CLEAR);
+
+        Log::channel('audit')->info('Console queue clear requested', [
+            'console_id' => $console->id,
+            'device_id' => $console->device_id,
+            'command_id' => $command->id,
+            'admin_id' => Auth::id(),
+        ]);
+
+        return redirect()->route('admin.consoles.edit', ['console' => $console->getRouteKey()])
+            ->with('success', 'Perintah kosongkan antrean dikirim. Perangkat akan menjalankannya pada heartbeat berikutnya.');
     }
 }

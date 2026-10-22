@@ -6,6 +6,7 @@ use App\Support\Rupiah;
 use App\Http\Controllers\Controller;
 use App\Models\RfidCard;
 use App\Models\Transaction;
+use App\Services\ConsoleCommandService;
 use App\Services\RfidTapService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,8 +18,10 @@ use Illuminate\Support\Facades\Log;
  */
 class TransactionController extends Controller
 {
-    public function __construct(private readonly RfidTapService $taps)
-    {
+    public function __construct(
+        private readonly RfidTapService $taps,
+        private readonly ConsoleCommandService $commands,
+    ) {
     }
 
     /**
@@ -78,7 +81,7 @@ class TransactionController extends Controller
     /**
      * POST /api/console/heartbeat
      *
-     * Body: { ip_address?, wifi_rssi?, firmware_version?, status? }
+     * Body: { ip_address?, wifi_rssi?, firmware_version?, status?, queue_pending?, queue_failed? }
      */
     public function heartbeat(Request $request): JsonResponse
     {
@@ -89,19 +92,33 @@ class TransactionController extends Controller
             'wifi_rssi' => ['nullable', 'integer', 'between:-100,0'],
             'firmware_version' => ['nullable', 'string', 'max:20'],
             'status' => ['nullable', 'in:online,offline,maintenance'],
+            'queue_pending' => ['nullable', 'integer', 'min:0', 'max:65535'],
+            'queue_failed' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
 
-        $console->update(array_merge($validated, [
+        $attributes = array_merge($validated, [
             'status' => $validated['status'] ?? 'online',
             'last_heartbeat_at' => now(),
-        ]));
+        ]);
+
+        // 0 adalah nilai yang sah ("antrean kosong"), jadi jangan pakai ??.
+        if (($validated['queue_pending'] ?? null) !== null || ($validated['queue_failed'] ?? null) !== null) {
+            $attributes['queue_reported_at'] = now();
+        }
+
+        $console->update($attributes);
 
         return response()->json([
             'success' => true,
             'data' => [
                 'server_time' => now()->toIso8601String(),
-                // Placeholder sampai Ticket 09 (Realtime) aktif.
-                'queue_commands' => [],
+                // Sumber waktu untuk firmware tanpa NTP (Ticket 10).
+                'server_epoch' => now()->getTimestamp(),
+                // Perintah admin yang belum di-ack, mis. `queue.clear`.
+                'queue_commands' => $this->commands->outstandingFor($console)
+                    ->map(fn ($command) => $command->toDevicePayload())
+                    ->values()
+                    ->all(),
             ],
         ]);
     }

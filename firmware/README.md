@@ -10,8 +10,8 @@ dan LCD I2C 1602/2004.
 | Platform | ESP8266 (NodeMCU v3 / `nodemcuv2`) |
 | Framework | Arduino via PlatformIO |
 | Filesystem | LittleFS |
-| Memakai RAM | 38.7% (31.680 / 81.920 byte) |
-| Memakai Flash | 33.7% (352.419 / 1.044.464 byte) |
+| Memakai RAM | 39.9% (32.712 / 81.920 byte) |
+| Memakai Flash | 34.9% (364.267 / 1.044.464 byte) |
 
 Batas acceptance criteria ticket: RAM < 80%, Flash < 70%. Keduanya terpenuhi
 dengan jarak yang jauh.
@@ -33,8 +33,9 @@ boot
                          │             ├─ kartu tidak valid → beep pendek
                          │             └─ order habis → "DIBATALKAN"
                          └─ offline → simpan ke LittleFS
-                                       └─ kirim ulang saat online
+                                       └─ kirim ulang saat online (batch 10)
                                        └─ tap > 5 menit → auto void
+                                           └─ lapor `status: voided` ke server
 ```
 
 ## Build
@@ -78,7 +79,7 @@ Buat file `firmware/data/config.json` sebelum upload:
 {
   "device_id": "ESP-AABBCCDDEEFF",
   "api_key": "paste-dari-artisan-console-credentials",
-  "server_url": "http://192.168.1.10:8000",
+  "server_url": "http://192.168.1.10:8010",
   "wifi_ssid": "NamaWifiSekolah",
   "wifi_password": "passwordwifi",
   "cashier_password": "",
@@ -120,27 +121,56 @@ pio run -e nodemcuv2_ota -t upload     # firmware
 
 ## Endpoint yang Dipakai
 
-Semua sudah tersedia dari Ticket 08 — firmware tidak butuh Realtime untuk alur inti.
-
 | Method | Path | Kapan dipakai |
 |---|---|---|
-| POST | `/api/console/heartbeat` | tiap 30 detik |
+| POST | `/api/console/heartbeat` | tiap 30 detik; membawa jam server + perintah admin |
 | GET | `/api/console/pending-order` | tiap 1.5 detik |
-| POST | `/api/console/rfid-tap` | saat kartu ditap |
+| POST | `/api/console/rfid-tap` | saat kartu ditap (online) |
+| POST | `/api/console/sync` | saat online kembali / antrean tersisa (batch 10) |
+| POST | `/api/console/commands/ack` | setelah perintah admin dijalankan |
 | GET | `/api/console/balance/{uid}` | belum dipakai di loop utama |
 
 Header wajib: `X-Device-ID` dan `X-API-Key`.
 
-## Antrean Offline
+## Antrean Offline (Ticket 10)
 
 - File: `/queue/taps.jsonl` (JSON Lines di LittleFS)
-- Batas: 500 KB, tolak tap baru di atas 90%
+- Batas: 500 KB, tap baru ditolak di atas 90%
+- Batch: maksimal **10 tap** per `POST /api/console/sync`
+- Jeda antar batch 500 ms; setelah koneksi kembali tunggu **2 detik** dulu
 - Auto-void: tap lebih tua dari **5 menit** ditandai `voided`
-- Maksimal mencoba kirim ulang tiap 5 detik
+- `retry_count` maksimal **3**; setelah itu record berstatus `failed` dan
+  berhenti dicoba otomatis (perlu `queue.clear` dari admin)
 
-Record dihapus dari antrean kalau server menjawab dengan alasan yang jelas
-(sukses, duplikat, saldo kurang, order sudah diproses). Kalau jawabannya kosong
-(network putus), `retry_count` naik dan record dicoba lagi.
+### Kapan record dibuang
+
+| Jawaban server | Tindakan |
+|---|---|
+| `success`, `duplicate` | hapus |
+| `void`, `discard` | hapus |
+| `insufficient_balance`, `insufficient_stock`, `card_invalid` | hapus (mengulang tidak mengubah hasil) |
+| `error` | `retry_count++` |
+| tidak ada respons HTTP | **tidak** dihitung retry; dicoba lagi nanti |
+
+### Sumber waktu
+
+Antrean harus bertahan setelah listrik mati, sedangkan `millis()` kembali ke 0
+setiap boot. Karena itu umur tap dihitung dari epoch:
+
+1. `server_epoch` pada respons heartbeat/sync (selalu tersedia saat online)
+2. SNTP setelah WiFi tersambung
+3. epoch terakhir yang disimpan di `/clock.json` (ditulis tiap 5 menit)
+
+Epoch tersimpan selalu sedikit **lebih tua** daripada waktu sebenarnya, jadi
+auto-void bisa tertunda tetapi tidak pernah membatalkan tap yang masih baru.
+Record dari boot sebelumnya yang umurnya tidak bisa dibuktikan dianggap basi.
+
+### Perintah admin
+
+Firmware tidak memakai WebSocket (heap ESP8266 tidak cukup untuk klien
+Phoenix). Perintah `queue.clear` ikut pada respons heartbeat/sync, dijalankan,
+lalu di-ack lewat `POST /api/console/commands/ack`. Selama belum di-ack,
+perintah dikirim ulang pada heartbeat berikutnya.
 
 ## Struktur File
 
@@ -153,26 +183,25 @@ Record dihapus dari antrean kalau server menjawab dengan alasan yang jelas
 | `src/rfid.cpp` | driver MFRC522, poll non-blocking |
 | `src/buzzer.cpp` | pola nada tanpa blocking |
 | `src/led.cpp` | LED status |
-| `src/network.cpp` | WiFi + klien REST |
-| `src/queue.cpp` | antrean LittleFS + auto-void |
+| `src/network.cpp` | WiFi + klien REST (termasuk sync batch) |
+| `src/queue.cpp` | antrean LittleFS + auto-void + retry |
+| `src/clock.cpp` | jam dinding (server/NTP/LittleFS) |
 
 ## Yang Belum Selesai
 
 | Item | Kenapa | Ticket |
 |---|---|---|
-| Realtime WebSocket (push `awaiting_rfid`) | Butuh Supabase project | 09 |
 | OTA update | Perlu bucket `firmware` + perangkat fisik | 14 |
-| `queue.clear` dari admin | Butuh channel Realtime | 09 |
 | Pengisian WiFi via portal | Versi sekarang hanya menampilkan AP, belum ada form | — |
+| Uji perangkat fisik | Butuh NodeMCU + RC522 + LCD sungguhan | 15 |
 
-Order yang menunggu tap saat ini ditemukan lewat polling
-`GET /api/console/pending-order` setiap 1.5 detik. Setelah Realtime aktif,
-polling ini bisa diganti dengan push supaya LCD langsung berubah.
+Order yang menunggu tap ditemukan lewat polling
+`GET /api/console/pending-order` setiap 1.5 detik. Ini tetap dipakai (bukan
+push) karena perangkat tidak berlangganan WebSocket.
 
 ## Verifikasi
 
-- `pio run` sukses untuk `nodemcuv2`, `nodemcuv2_ota`
-- Memori: RAM 38.7%, Flash 33.7%
+- `python -m platformio run -e nodemcuv2_ota` sukses
+- Memori: RAM 39.9%, Flash 34.9%
 - Perlu **perangkat fisik** untuk uji end-to-end (baca UID kartu, respons LCD,
-  nada buzzer). Simulasi otomatis dengan Wokwi belum disiapkan — lihat
-  environment `wokwi` di `platformio.ini` sebagai titik awal.
+  nada buzzer). Simulasi Wokwi belum diverifikasi.

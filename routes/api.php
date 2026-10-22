@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\Console\SyncController as ConsoleSyncController;
 use App\Http\Controllers\Api\Console\TransactionController as ConsoleTransactionController;
 use App\Http\Controllers\Cashier\OrderController;
 
@@ -28,4 +29,9 @@ Route::prefix('console')->middleware('console.auth')->group(function () {
         ->where('uid', '[0-9A-Fa-f]{8}')
         ->name('console.balance');
     Route::post('/heartbeat', [ConsoleTransactionController::class, 'heartbeat'])->name('console.heartbeat');
+
+    // Ticket 10: kirim antrean tap offline sekaligus, lalu ack perintah admin.
+    Route::post('/sync', [ConsoleSyncController::class, 'sync'])->name('console.sync');
+    Route::post('/commands/ack', [ConsoleSyncController::class, 'acknowledgeCommands'])
+        ->name('console.commands.ack');
 });

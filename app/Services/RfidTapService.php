@@ -44,6 +44,16 @@ class RfidTapService
             $previous = Transaction::where('tap_idempotency_key', $tapIdempotencyKey)->first();
 
             if ($previous) {
+                // Kunci yang sama tetapi order/console berbeda bukan retry,
+                // melainkan record rusak atau kunci yang dipakai ulang. Jangan
+                // kembalikan struk order lain (kebocoran data pembeli).
+                if ($previous->id !== $orderId || $previous->console_id !== $consoleId) {
+                    return $this->result(
+                        self::OUTCOME_ORDER_NOT_TAPPABLE,
+                        reason: 'idempotency_key sudah dipakai untuk order lain.'
+                    );
+                }
+
                 return $this->result(self::OUTCOME_DUPLICATE, $previous, $previous->buyer);
             }
         }

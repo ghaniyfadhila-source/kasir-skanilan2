@@ -2,11 +2,9 @@
 
 namespace App\Console\Commands;
 
-use App\Events\OrderVoided;
-use App\Models\AuditLog;
 use App\Models\Transaction;
+use App\Services\OrderVoidService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -18,6 +16,11 @@ class VoidExpiredOrders extends Command
     protected $signature = 'orders:void-expired {--dry-run : Hanya tampilkan, jangan ubah data}';
 
     protected $description = 'Batalkan order menunggu tap RFID yang sudah kedaluwarsa';
+
+    public function __construct(private readonly OrderVoidService $voids)
+    {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -35,45 +38,17 @@ class VoidExpiredOrders extends Command
         $voided = 0;
 
         // Diproses per-chunk supaya tidak menahan lock panjang di database.
-        $query->with('transactionItems')->chunkById(100, function ($orders) use (&$voided) {
+        $query->select('id')->chunkById(100, function ($orders) use (&$voided) {
             foreach ($orders as $order) {
-                $changed = DB::transaction(function () use ($order) {
-                    // lockForUpdate + re-check: mencegah membatalkan order yang
-                    // mungkin saja baru saja selesai diproses tap RFID.
-                    //
-                    // Hanya Status_AWAITING_RFID yang lolos. `canBePaidByTap()`
-                    // tidak boleh dipakai di sini: ia juga bernilai false untuk
-                    // order yang KEDALUWARSA, padahal justru itu yang kita batalkan.
-                    $fresh = Transaction::where('id', $order->id)->lockForUpdate()->first();
-
-                    if (! $fresh || ! $fresh->isAwaitingRfid()) {
-                        return false;
-                    }
-
-                    $fresh->forceFill([
-                        'status' => Transaction::STATUS_VOIDED,
-                        'voided_at' => now(),
-                        'error_code' => 'RFID_TIMEOUT',
-                        'error_message' => 'Tidak ada tap RFID dalam batas waktu.',
-                    ])->save();
-
-                    // Ticket 09: kasir yang sedang menunggu tap harus diberi
-                    // tahu seketika, bukan tetap menggantung sampai waktu habis.
-                    OrderVoided::dispatch($fresh, 'kedaluwarsa');
-
-                    AuditLog::create([
-                        'console_id' => $fresh->console_id,
-                        'user_id' => $fresh->user_id,
-                        'action' => 'transaction.voided_timeout',
-                        'metadata' => [
-                            'transaction_id' => $fresh->id,
-                            'total_cents' => $fresh->total_cents,
-                            'expires_at' => $fresh->expires_at?->toIso8601String(),
-                        ],
-                    ]);
-
-                    return true;
-                });
+                // `voidIfAwaiting()` mengunci baris dan mengecek ulang status:
+                // order yang baru saja dibayar tap RFID tidak ikut dibatalkan.
+                $changed = $this->voids->voidIfAwaiting(
+                    orderId: $order->id,
+                    errorCode: 'RFID_TIMEOUT',
+                    errorMessage: 'Tidak ada tap RFID dalam batas waktu.',
+                    auditAction: 'transaction.voided_timeout',
+                    reason: 'kedaluwarsa',
+                );
 
                 if ($changed) {
                     $voided++;

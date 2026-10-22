@@ -37,6 +37,11 @@ class AppServiceProvider extends ServiceProvider
 
     public function register(): void
     {
+        // Singleton: RealtimePublisher menyimpan buffer saat mode batch. Listener
+        // dan controller harus memakai instance yang sama, kalau tidak
+        // `beginBatch()` tidak akan menahan apa pun.
+        $this->app->singleton(\App\Services\Realtime\RealtimePublisher::class);
+
         // SupabaseEnv butuh path file, jadi tidak bisa di-resolve otomatis oleh
         // container. Binding di sini membuatnya bisa di-inject ke mana saja.
         //

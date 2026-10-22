@@ -40,6 +40,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             ->parameters(['console' => 'console']);
         Route::post('/consoles/{console}/rotate-credentials', [ConsoleController::class, 'rotateCredentials'])
             ->name('consoles.rotate-credentials');
+        Route::post('/consoles/{console}/queue/clear', [ConsoleController::class, 'clearQueue'])
+            ->name('consoles.queue.clear');
 
         // Menu Management Routes
         Route::prefix('menu')->name('menu.')->group(function () {

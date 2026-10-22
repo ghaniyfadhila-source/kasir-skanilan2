@@ -17,7 +17,7 @@ class RealtimeConsoleObserver
     /**
      * @var string[]
      */
-    private const VISIBLE_FIELDS = ['status', 'last_seen_at'];
+    private const VISIBLE_FIELDS = ['status', 'last_heartbeat_at'];
 
     public function updated(Console $console): void
     {

@@ -26,10 +26,51 @@ use Illuminate\Support\Facades\Log;
 class RealtimePublisher
 {
     /**
+     * Mode kumpulkan: broadcast ditahan di memori sampai {@see endBatch()}.
+     *
+     * Dipakai oleh `POST /api/console/sync`: satu batch 50 tap menghasilkan
+     * 100 event. Tanpa penggabungan, itu berarti 100 panggilan HTTP berurutan
+     * ke Supabase dari dalam satu request — cukup untuk membuat perangkat
+     * timeout dan mengulang seluruh batch.
+     */
+    private bool $buffering = false;
+
+    /** @var array<int, array{topic: string, event: string, payload: array<string, mixed>}> */
+    private array $buffer = [];
+
+    /**
+     * Mulai menahan broadcast sampai {@see endBatch()} dipanggil.
+     */
+    public function beginBatch(): void
+    {
+        $this->buffering = true;
+        $this->buffer = [];
+    }
+
+    /**
+     * Kirim semua broadcast yang tertahan dalam satu panggilan HTTP.
+     *
+     * @return int jumlah pesan yang terkirim
+     */
+    public function endBatch(): int
+    {
+        $this->buffering = false;
+        $messages = $this->buffer;
+        $this->buffer = [];
+
+        if ($messages === []) {
+            return 0;
+        }
+
+        return $this->send($messages) ? count($messages) : 0;
+    }
+
+    /**
      * Kirim satu event ke satu topic.
      *
      * @param  array<string, mixed>  $payload
-     * @return bool  true kalau server menerima (HTTP 202)
+     * @return bool  true kalau server menerima (HTTP 202) atau pesan dikumpulkan
+     *               untuk dikirim oleh {@see endBatch()}
      */
     public function broadcast(string $topic, string $event, array $payload): bool
     {
@@ -46,6 +87,20 @@ class RealtimePublisher
             return false;
         }
 
+        if ($this->buffering) {
+            $this->buffer[] = compact('topic', 'event', 'payload');
+
+            return true;
+        }
+
+        return $this->send([compact('topic', 'event', 'payload')]);
+    }
+
+    /**
+     * @param  array<int, array{topic: string, event: string, payload: array<string, mixed>}>  $messages
+     */
+    private function send(array $messages): bool
+    {
         try {
             $response = Http::withHeaders([
                 'apikey' => (string) config('realtime.server_key'),
@@ -53,23 +108,16 @@ class RealtimePublisher
                 'Content-Type' => 'application/json',
             ])
                 ->timeout((int) config('realtime.timeout', 5))
-                ->post($this->endpoint(), [
-                    'messages' => [[
-                        'topic' => $topic,
-                        'event' => $event,
-                        'payload' => $payload,
-                    ]],
-                ]);
+                ->post($this->endpoint(), ['messages' => $messages]);
         } catch (ConnectionException $e) {
-            $this->warn("Broadcast `{$event}` gagal: {$e->getMessage()}");
+            $this->warn("Broadcast gagal: {$e->getMessage()}");
 
             return false;
         }
 
         if (! $response->successful()) {
             $this->warn(sprintf(
-                'Broadcast `%s` ditolak (HTTP %d): %s',
-                $event,
+                'Broadcast ditolak (HTTP %d): %s',
                 $response->status(),
                 mb_substr($response->body(), 0, 200)
             ));
@@ -77,10 +125,12 @@ class RealtimePublisher
             return false;
         }
 
-        Log::channel('audit')->info('Realtime broadcast', [
-            'event' => $event,
-            'topic' => self::maskTopic($topic),
-        ]);
+        foreach ($messages as $message) {
+            Log::channel('audit')->info('Realtime broadcast', [
+                'event' => $message['event'],
+                'topic' => self::maskTopic($message['topic']),
+            ]);
+        }
 
         return true;
     }
